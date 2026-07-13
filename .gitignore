@@ -24,6 +24,6 @@ src/LIB/eccodes-*-Source/
 src/LIB/grib_api-*-Source/
 src/LIB/SPARTACUS_SURFACE_*/
 src/LIB/netcdf4/*/
-# Sorties de compilation de test ECOCLIMAP
+# Sorties de compilation de test ECOCLIMAP (a.out ; les .bin covers sont
+# versionnés : données de référence stables nécessaires à PGD)
 MY_RUN/ECOCLIMAP/a.out
-MY_RUN/ECOCLIMAP/*.bin

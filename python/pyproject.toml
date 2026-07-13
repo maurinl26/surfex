@@ -13,7 +13,8 @@ authors = [{ name = "Karpos" }]
 dependencies = ["numpy>=1.26"]
 
 [project.optional-dependencies]
-xarray = ["xarray>=2024.1"]
+netcdf = ["netCDF4>=1.6"]
+xarray = ["xarray>=2024.1", "netCDF4>=1.6"]
 
 [tool.meson-python.args]
 # Chemin de la lib SURFEX pré-construite (voir ../build.sh --lib) peut être passé :

@@ -1,0 +1,66 @@
+name: Build & run (mac mini self-hosted)
+
+# Build natif SURFEX + orchestration réelle (PGD) sur le runner self-hosted mac mini.
+# Prérequis runner : gfortran + netcdf-fortran (brew), python3. Labels à adapter
+# à ton runner (Settings → Actions → Runners).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'build.sh'
+      - 'python/**'
+      - '.github/workflows/selfhosted-macmini.yml'
+
+concurrency:
+  group: macmini-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-run:
+    runs-on: [self-hosted, macOS, ARM64]   # ← labels du mac mini
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier la toolchain
+        run: |
+          set -e
+          which gfortran nf-config python3
+          gfortran --version | head -1
+          nf-config --version
+
+      - name: Build SURFEX + libsurfex.a
+        run: ./build.sh --compiler gfortran
+
+      - name: Installer le package (venv)
+        run: |
+          python3 -m venv .venv
+          ./.venv/bin/pip install -q --upgrade pip
+          ./.venv/bin/pip install -q ./python \
+            -Csetup-args=-Dsurfex_lib=$GITHUB_WORKSPACE/exe/libsurfex.a
+
+      - name: Smoke — orchestration PGD réelle (cas cdp9697)
+        env:
+          SURFEX_EXE_DIR: ${{ github.workspace }}/exe
+        run: |
+          set -e
+          WD="$RUNNER_TEMP/cdp_run"
+          rm -rf "$WD"; mkdir -p "$WD"
+          cp MY_RUN/NAMELIST/cdp9697/*.nam "$WD"/
+          cp MY_RUN/DATA/cdp9697/MET_CDP_9697.txt "$WD"/
+          # Orchestration via le CLI (lie ECOCLIMAP + lance PGD)
+          ./.venv/bin/python -m karpos_surfex run \
+            --workdir "$WD" \
+            --ecoclimap "$GITHUB_WORKSPACE/MY_RUN/ECOCLIMAP" \
+            --steps pgd
+          test -f "$WD/PGD.txt" && echo "✅ PGD a produit PGD.txt"
+          # NB : la chaîne complète PREP→OFFLINE attend un cas sans entrée GRIB
+          #      (cdp9697 initialise depuis un GRIB — cf. issue #5). PGD valide
+          #      déjà build + exécution réelle + orchestration de bout en bout.
+
+      - name: Smoke — import + API
+        run: |
+          ./.venv/bin/python -c "import karpos_surfex as ks; print('OK', ks.__version__, ks.__all__)"

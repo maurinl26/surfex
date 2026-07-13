@@ -17,9 +17,15 @@ numpy_inc = run_command(
 ).stdout().strip()
 inc_np = include_directories(numpy_inc)
 
-# --- NetCDF (Fortran) via nf-config ------------------------------------------
+# --- NetCDF via nf-config (+ nc-config pour la lib C) ------------------------
+# nf-config --flibs référence -lnetcdf mais pas toujours son -L (Cellar séparé
+# chez Homebrew) : on complète avec nc-config --libs.
 nfconfig = find_program('nf-config', required: true)
 nc_flibs = run_command(nfconfig, '--flibs', check: true).stdout().split()
+ncconfig = find_program('nc-config', required: false)
+if ncconfig.found()
+  nc_flibs += run_command(ncconfig, '--libs', check: true).stdout().split()
+endif
 
 # --- Flags Fortran alignés sur les Rules SURFEX ------------------------------
 # Promotion real-8 + compat gfortran >=10 (cf. src/Rules.MCgfortran.mk).

@@ -55,19 +55,26 @@ forcing NetCDF (CERRA, #4) en place.
   (proxy), précip=0 (nuits de gel sèches) — à raffiner.
 - `OPTIONS_run.nam` — namelist PGD + PREP (uniforme) + OFFLINE (forcing NC).
 
-### ⛔ Blocage OFFLINE : PREP veut un first-guess GRIB
+### ✅ Chaîne complète PGD → PREP → OFFLINE (voie 2 : PREP file-less patché)
 
-PGD ✅. PREP initialise WGI/WR/SN_VEG/LAI en uniforme, mais l'**état sol primaire
-(WG/TG)** réclame un fichier atmosphérique GRIB (`HFILETYPE`), non contournable via
-namelist (testé : XUNIF, ISBA-seul, `CISBA='3-L'`, `CFILE/CFILETYPE` blancs).
-Comportement de la distribution — même le cas de référence `cdp9697` gribe.
+**La chaîne tourne de bout en bout** avec forcing AROME réel :
+```bash
+python domains/drome/arome_to_forcing.py <workdir> PGD.nc   # FORCING.nc AROME
+python -m karpos_surfex run --workdir <workdir> --ecoclimap MY_RUN/ECOCLIMAP \
+       --steps pgd,prep,offline
+# → SURF_ATM_DIAGNOSTICS.OUT.nc : TS, TSRAD (T_skin), T2M, HU2M, RN, H, LE… 120×168
+```
 
-**Débloquage (prochaine session focalisée)** :
-1. Construire **eccodes** (support GRIB réel — supprime le stub) puis fournir un
-   first-guess GRIB (analyse ECMWF/AROME sol, ou climatologie), OU
-2. Patcher SURFEX pour autoriser un PREP 100 % uniforme (init sans fichier).
+**PREP file-less** obtenu par patch SURFEX (repli init uniforme au lieu du GRIB) :
+`prep_hor_isba_field`, `prep_hor_snow_field`, `read_prep_file_date`,
+`prep_surf_atm` (CLEAR_GRIB_INDEX désactivé) + stub grib (release no-op) +
+`build.sh` (relink forcé — sinon la modif du stub seul n'est pas relinkée).
 
-Tout l'amont est prêt (grille + orographie + forcing AROME + obs Sencrop).
+Validé : run AROME 2026-07-13 13Z → TS/TSRAD ∈ [23,9 ; 38,9] °C (après-midi été).
+Le `PREP.nc` produit sert de first-guess pour SODA (#7).
+
+⚠️ Le temps du PREP (`XTIME`) doit == le 1er pas du forcing (le join SP3 accumulé
+décale d'1 h). Limites forcing : SWdown proxy, précip=0 (à raffiner, #4).
 
 ## Fichiers
 

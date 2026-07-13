@@ -130,7 +130,9 @@ IF(YSC%U%NDIM_TOWN>0) CALL PREP_TOWN(YSC%DTCO, YSC%UG, YSC%U, YSC%USS, YSC%GCP, 
                                      YSC%IM%DTV%NPAR_VEG_IRR_USE,                                         &
                                      HPROGRAM,YATMFILE,YATMFILETYPE,YPGDFILE,YPGDFILETYPE,YDCTL)
 !
- CALL CLEAR_GRIB_INDEX
+!SFX_KARPOS: nettoyage d'index GRIB désactivé (build NetCDF-only, aucun index
+! GRIB n'est ouvert en PREP file-less). Voir issue #5.
+! CALL CLEAR_GRIB_INDEX
 !
 IF (LHOOK) CALL DR_HOOK('PREP_SURF_ATM',1,ZHOOK_HANDLE)
 !

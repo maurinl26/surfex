@@ -154,6 +154,9 @@ fi
 # OFFLINE/PGD/PREP/SODA). On cible `progmaster` — et NON `all` — pour éviter la
 # cible `ecoclimap` qui régénère les .bin (recette cassée from-scratch ; les
 # covers sont versionnés dans MY_RUN/ECOCLIMAP/).
+# Force le relink : make ne trace pas grib_api_stub.o (pas un spll_*.o) → sans ça,
+# une modif du stub seul ne serait jamais relinkée dans les exécutables.
+rm -f "$OBJM"/lib-*MASTER.a "$OBJM"/bib-*MASTER.a "$OBJM"/PGD "$OBJM"/PREP "$OBJM"/OFFLINE "$OBJM"/SODA
 "${MK[@]}" progmaster
 
 # Étape 3 : installe les exécutables dans exe/ (copie directe depuis le dir objet

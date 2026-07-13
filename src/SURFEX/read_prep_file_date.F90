@@ -75,7 +75,9 @@ REAL(KIND=JPRB) :: ZHOOK_HANDLE
 IF (LHOOK) CALL DR_HOOK('READ_PREP_FILE_DATE',0,ZHOOK_HANDLE)
 IF(HFILETYPE=='GRIB  ') THEN
 !
-  CALL PREP_GRIB_GRID(HFILE,KLUOUT,YINMODEL,YGRIDTYPE,YINTERPTYPE,TPTIME)
+  !SFX_KARPOS: build NetCDF-only → pas de lecture de date GRIB ; on conserve la
+  ! date de la namelist (NAM_PREP_SURF_ATM). Voir issue #5.
+  WRITE(KLUOUT,*) 'KARPOS: lecture date GRIB ignoree (date namelist conservee)'
 !
 ELSE IF(HFILETYPE=='MESONH' .OR. HFILETYPE=='LFI   ' .OR. HFILETYPE=='ASCII '.OR. HFILETYPE=='FA    '.OR.&
         HFILETYPE=='NC    ') THEN

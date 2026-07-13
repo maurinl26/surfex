@@ -15,13 +15,18 @@ conf/profile_surfex*
 exe/*
 !exe/empty.txt
 
-# Archives tierces non nécessaires (NetCDF système + stub grib)
-src/LIB/*.tar
-src/LIB/*.tar.gz
-src/LIB/netcdf4/*.tar.gz
+# Arbres tiers déjà extraits (regénérés par configure : SPARTACUS/MEGAN sont
+# détarrés inconditionnellement — on GARDE donc leurs .tar.gz dans le contexte).
+src/LIB/SPARTACUS
+src/LIB/MEGAN
 src/LIB/eccodes-*-Source
 src/LIB/grib_api-*-Source
-src/LIB/SPARTACUS_SURFACE_*
+src/LIB/netcdf4/hdf5-*/
+src/LIB/netcdf4/netcdf-*/
+src/LIB/netcdf4/curl-*/
+src/LIB/netcdf4/zlib-*/
+src/LIB/netcdf4/szip-*/
+src/LIB/netcdf4/m4-*/
 
-# Docs/slides lourds inutiles au build
+# Sortie de compilation ECOCLIMAP
 MY_RUN/ECOCLIMAP/a.out

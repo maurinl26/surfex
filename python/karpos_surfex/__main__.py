@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import __version__, driver, orchestrate
@@ -21,7 +22,8 @@ def main(argv=None):
 
     r = sub.add_parser("run", help="enchaîne PGD→PREP→OFFLINE dans un répertoire")
     r.add_argument("--workdir", required=True, help="répertoire de run (namelists + forcing)")
-    r.add_argument("--ecoclimap", default=None, help="répertoire des covers ECOCLIMAP (*.bin)")
+    r.add_argument("--ecoclimap", default=os.environ.get("ECOCLIMAP_DIR"),
+                   help="répertoire des covers ECOCLIMAP (*.bin) [déf: $ECOCLIMAP_DIR]")
     r.add_argument("--steps", default="pgd,prep,offline", help="étapes CSV (pgd,prep,offline,soda)")
 
     w = sub.add_parser("where", help="localise les exécutables SURFEX")

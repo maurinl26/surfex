@@ -1,0 +1,27 @@
+# Contexte Docker minimal
+.git
+.github
+**/__pycache__
+python/dist
+python/build
+python/.mesonpy-*
+**/*.egg-info
+.venv
+testvenv
+
+# Artefacts de build (regénérés dans l'image)
+src/dir_obj-*
+conf/profile_surfex*
+exe/*
+!exe/empty.txt
+
+# Archives tierces non nécessaires (NetCDF système + stub grib)
+src/LIB/*.tar
+src/LIB/*.tar.gz
+src/LIB/netcdf4/*.tar.gz
+src/LIB/eccodes-*-Source
+src/LIB/grib_api-*-Source
+src/LIB/SPARTACUS_SURFACE_*
+
+# Docs/slides lourds inutiles au build
+MY_RUN/ECOCLIMAP/a.out

@@ -56,7 +56,7 @@ $(OBJSD) : OPT = $(OPT_BASE) $(OPT_PERF0)
 endif
 #
 ifeq "$(VER_MPI)" "NOMPI"
-F90= gfortran -pg
+F90= gfortran
 CC = gcc
 else
 F90 = mpif90

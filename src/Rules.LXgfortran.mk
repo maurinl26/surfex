@@ -15,7 +15,9 @@ USE_SPLR = YES
 #
 #OBJDIR_PATH=/home/escj/azertyuiopqsdfghjklm/wxcvbn/azertyuiopqsdfghjklmwxcvbn
 #
-OPT_BASE  = -fdefault-real-8 -fdefault-double-8 -g -fno-second-underscore -fpic  -ffpe-trap=overflow,zero,invalid -fbacktrace -fconvert=swap -pg
+# -fallow-argument-mismatch / -fallow-invalid-boz : requis pour compiler SURFEX V9
+# avec gfortran >= 10 (appels type-MPI non conformes, désormais erreurs par défaut).
+OPT_BASE  = -fdefault-real-8 -fdefault-double-8 -g -fno-second-underscore -fpic  -ffpe-trap=overflow,zero,invalid -fbacktrace -fconvert=swap -fallow-argument-mismatch -fallow-invalid-boz
 #
 OPT_PERF0 = -O0
 OPT_PERF2 = -O2

@@ -6,3 +6,18 @@ src/LIB/XIOS-GMGEC-2152.tar
 exe/PGD
 exe/PREP
 exe/OFFLINE
+
+# --- Artefacts de build générés par build.sh / configure ---
+# Profils d'environnement générés
+conf/profile_surfex
+conf/profile_surfex-*
+# Répertoire objets/modules
+src/dir_obj-*/
+# Sources tierces détarrées par configure (on garde les tarballs, pas les arbres extraits)
+src/LIB/eccodes-*-Source/
+src/LIB/grib_api-*-Source/
+src/LIB/SPARTACUS_SURFACE_*/
+src/LIB/netcdf4/*/
+# Sorties de compilation de test ECOCLIMAP
+MY_RUN/ECOCLIMAP/a.out
+MY_RUN/ECOCLIMAP/*.bin

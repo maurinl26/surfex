@@ -1,0 +1,254 @@
+!SFX_LIC Copyright 1994-2014 CNRS, Meteo-France and Universite Paul Sabatier
+!SFX_LIC This is part of the SURFEX software governed by the CeCILL-C licence
+!SFX_LIC version 1. See LICENSE, CeCILL-C_V1-en.txt and CeCILL-C_V1-fr.txt
+!SFX_LIC for details. version 1.
+!     #########
+      SUBROUTINE READ_ISBA_CONF_n (CHI, MGN, DE, DGO, DMI, DUI, IO, HPROGRAM)
+!     #######################################################
+!
+!!****  *READ_ISBA_CONF* - routine to read the configuration for ISBA
+!!
+!!    PURPOSE
+!!    -------
+!!
+!!**  METHOD
+!!    ------
+!!
+!!    EXTERNAL
+!!    --------
+!!
+!!
+!!    IMPLICIT ARGUMENTS
+!!    ------------------
+!!
+!!    REFERENCE
+!!    ---------
+!!
+!!
+!!    AUTHOR
+!!    ------
+!!      V. Masson   *Meteo France*
+!!
+!!    MODIFICATIONS
+!!    -------------
+!!      Original    01/2003
+!!      P Le Moigne   09/2005 : AGS modifs of L. Jarlan
+!!      P Le Moigne   09/2005 : CSNOWRES option
+!!      P. Le Moigne  06/2006 : seeding and irrigation
+!!      P. Le Moigne  05/2008 : deep soil characteristics
+!!      R. El Khatib  04/2012 : Fix message handling
+!!      C. Carmagnola 01/2013 : CSNOWMETAMO = 'B92','C13','F06','T07'
+!!      B. Decharme   04/2013 : delete CTOPREG
+!!      B. Decharme   04/2020 : Change NAM_SPINUP_CARB to NAM_ISBA_CC
+!!      J. Colin      08/2016 : Snow and soil moisture nudging
+!!      B. Cluzet     08/2016 : New options Cluzet et al 2016 for snow
+!!      B. Decharme   12/2023 : CHORT='CM6' -> Tuning for CNRM-CM/ESM to reduce the too earlier
+!!                                             spring time snowmelt due to the non representation
+!!                                             of vegetation-snow interaction and thus to prevent
+!!                                             soil ice to thaw before snowmelt. Obsolete with MEB.
+!!      B. Decharme   12/2023 : LNITRO_DILU to CNITRO_DILU
+!!      P. Le Moigne  12/2023 : Roughness length for heat Zilitinkevich
+!!
+!-------------------------------------------------------------------------------
+!
+!*       0.    DECLARATIONS
+!              ------------
+!
+!
+!
+!
+!
+USE MODD_CH_ISBA_n, ONLY : CH_ISBA_t
+USE MODD_MEGAN_n, ONLY : MEGAN_t
+USE MODD_DIAG_EVAP_ISBA_n, ONLY : DIAG_EVAP_ISBA_t
+USE MODD_DIAG_n, ONLY : DIAG_OPTIONS_t
+USE MODD_DIAG_MISC_ISBA_n, ONLY : DIAG_MISC_ISBA_t
+USE MODD_ISBA_OPTIONS_n, ONLY : ISBA_OPTIONS_t
+USE MODD_DIAG_UTCI_n, ONLY : DIAG_UTCI_t
+!
+USE MODE_MODELN_SURFEX_HANDLER
+!
+USE MODE_POS_SURF
+!
+USE MODI_TEST_NAM_VAR_SURF
+USE MODI_GET_LUOUT
+USE MODI_OPEN_NAMELIST
+USE MODI_CLOSE_NAMELIST
+!
+USE MODN_ISBA_n
+!
+USE MODD_READ_NAMELIST, ONLY : LNAM_READ
+USE MODD_SURF_PAR,   ONLY : XUNDEF
+!
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+!*       0.1   Declarations of arguments
+!              -------------------------
+!
+!
+TYPE(CH_ISBA_t), INTENT(INOUT) :: CHI
+TYPE(MEGAN_t), INTENT(INOUT) :: MGN
+TYPE(DIAG_EVAP_ISBA_t), INTENT(INOUT) :: DE
+TYPE(DIAG_OPTIONS_t), INTENT(INOUT) :: DGO
+TYPE(DIAG_MISC_ISBA_t), INTENT(INOUT) :: DMI
+TYPE(DIAG_UTCI_t), INTENT(INOUT) :: DUI
+TYPE(ISBA_OPTIONS_t), INTENT(INOUT) :: IO
+!
+CHARACTER(LEN=6),  INTENT(IN)  :: HPROGRAM ! program calling ISBA
+!
+!
+!*       0.2   Declarations of local variables
+!              -------------------------------
+!
+!
+LOGICAL           :: GFOUND         ! Return code when searching namelist
+INTEGER           :: ILUOUT         ! logical unit of output file
+INTEGER           :: INAM           ! logical unit of namelist file
+INTEGER           :: IMI
+REAL(KIND=JPRB) :: ZHOOK_HANDLE
+!-------------------------------------------------------------------------------
+!
+!* get output listing file logical unit
+!
+IF (LHOOK) CALL DR_HOOK('READ_ISBA_CONF_N',0,ZHOOK_HANDLE)
+ CALL GET_LUOUT(HPROGRAM,ILUOUT)
+!
+IMI=GET_CURRENT_MODEL_INDEX_SURFEX()
+!
+IF (IMI.NE.-1 .AND. LNAM_READ) THEN
+ CALL INIT_NAM_ISBAn(IO)
+ CALL INIT_NAM_ISBA_AGSn(IO)
+ CALL INIT_NAM_SGH_ISBAn(IO)
+ CALL INIT_NAM_DIAG_ISBAn(DE, DGO, DMI, DUI)
+ CALL INIT_NAM_DIAG_SURFn(DGO)
+ CALL INIT_NAM_CH_CONTROLn(CHI)
+ CALL INIT_NAM_CH_ISBAn(CHI, MGN)
+ CALL INIT_NAM_ISBA_CCn(IO)
+ CALL INIT_NAM_ISBA_SNOWn(IO)
+ CALL INIT_NAM_ISBA_NUDGINGn(IO)
+ !
+ENDIF
+!
+IF (LNAM_READ) THEN
+ !
+ !* open namelist file
+ !
+ CALL OPEN_NAMELIST(HPROGRAM,INAM)
+ !
+ !* reading of namelist
+ !  -------------------
+ !
+ CALL POSNAM(INAM,'NAM_ISBAN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_ISBAn)
+ CALL POSNAM(INAM,'NAM_ISBA_AGSN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_ISBA_AGSn)
+ CALL POSNAM(INAM,'NAM_SGH_ISBAN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_SGH_ISBAn)
+ CALL POSNAM(INAM,'NAM_DIAG_SURFN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_DIAG_SURFn)
+ CALL POSNAM(INAM,'NAM_DIAG_ISBAN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_DIAG_ISBAn)
+ CALL POSNAM(INAM,'NAM_CH_CONTROLN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_CH_CONTROLn)
+ CALL POSNAM(INAM,'NAM_CH_ISBAN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_CH_ISBAn)
+ CALL POSNAM(INAM,'NAM_ISBA_CCN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_ISBA_CCn)
+ CALL POSNAM(INAM,'NAM_ISBA_SNOWN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_ISBA_SNOWn)
+ CALL POSNAM(INAM,'NAM_ISBA_NUDGINGN',GFOUND,ILUOUT)
+ IF (GFOUND) READ(UNIT=INAM,NML=NAM_ISBA_NUDGINGn)
+ !
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSCOND',CSCOND,'NP89','PL98')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CC1DRY',CC1DRY,'DEF ','GB93')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSOILFRZ',CSOILFRZ,'DEF','LWT')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CDIFSFCOND',CDIFSFCOND,'DEF ','MLCH')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWRES',CSNOWRES,'DEF','RIL','M98')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CCPSURF',CCPSURF,'DRY','HUM')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CZ0HEAT',CZ0HEAT,'DEF','Z95')
+ !
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CRUNOFF',CRUNOFF,'WSAT','DT92','SGH ','TOPD')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CKSAT',CKSAT,'DEF','SGH','EXP')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CRAIN',CRAIN,'DEF','SGH')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CHORT',CHORT,'DEF','SGH','CM6')
+ !
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CNITRO_DILU',CNITRO_DILU,'NONE','CA08','ESM2')
+ !
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CCH_DRY_DEP',CCH_DRY_DEP,'      ','WES89 ','NONE  ')
+ !
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWMETAMO',CSNOWMETAMO,'B21','C13','F06','T07','S-C','S-F','S-B')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWRAD',CSNOWRAD,'B92','B93','T17')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWFALL',CSNOWFALL,'V12','S02','A76','P75','NZE')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWCOND',CSNOWCOND,'Y81', 'I02','C11')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWHOLD',CSNOWHOLD,'B92','BFZ','SPK','O04','B02')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWCOMP',CSNOWCOMP,'B92', 'S14', 'T11')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWDRIFT',CSNOWDRIFT,'NONE','DFLT','VI13','GA01','PAPP')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWZREF',CSNOWZREF,'CST','VAR')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWMOB',CSNOWMOB,'GM98','VI12','CONS','COGM','LI07')
+ !
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CNUDG_WG',CNUDG_WG,'DEF','DAY','MTH')
+ !
+ !options for snowpappus transport scheme configuration
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWPAPPUSERODEPO',CSNOWPAPPUSERODEPO,'ERO','DEP','DIV','NON')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CLIMVFALL',CLIMVFALL,'DEND','PREC','MIXT')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSALTPAPPUS',CSALTPAPPUS,'P90','S04')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CSNOWFPAPPUS',CSNOWFPAPPUS,'NONE','GM98','VI13')
+ CALL TEST_NAM_VAR_SURF(ILUOUT,'CPAPPUSSUBLI',CPAPPUSSUBLI,'NONE','SBSM','BJ10','BJ03','GR06')
+ IF(LSNOWDRIFT_SUBLIM .AND. LSNOWSYTRON) THEN
+    WRITE(ILUOUT,*) '------------------------------------'
+    WRITE(ILUOUT,*) 'SYTRON scheme already computes mass loss due to sublimation '
+    WRITE(ILUOUT,*) 'Set LSNOWDRIFT_SUBLIM to FALSE'
+    WRITE(ILUOUT,*) '------------------------------------'
+    CALL ABOR1_SFX('READ_ISBA_CONF: TURN OFF LSNOWDRIFT_SUBLIM')
+ ENDIF
+ IF(LSNOWDRIFT_SUBLIM .AND. LSNOWPAPPUS) THEN
+    WRITE(ILUOUT,*) '------------------------------------'
+    WRITE(ILUOUT,*) 'PAPPUS scheme already computes mass loss due to sublimation '
+    WRITE(ILUOUT,*) 'Set LSNOWDRIFT_SUBLIM to FALSE'
+    WRITE(ILUOUT,*) '------------------------------------'
+    CALL ABOR1_SFX('READ_ISBA_CONF: TURN OFF LSNOWDRIFT_SUBLIM')
+ ENDIF
+ IF (.NOT. LSNOWPAPPUS .AND. (CSNOWFPAPPUS /= 'NONE')) THEN
+    WRITE(ILUOUT,*) '------------------------------------'
+    WRITE(ILUOUT,*) 'trying to modify fresh snow properties whereas pappus scheme is not activated'
+    WRITE(ILUOUT,*) 'Set LSNOWPAPPUS to .TRUE. or CNOWFPAPPUS to NONE'
+    WRITE(ILUOUT,*) '------------------------------------'
+    CALL ABOR1_SFX('READ_ISBA_CONF: Set LSNOWPAPPUS to .TRUE. or CNOWFPAPPUS to NONE')
+ ENDIF
+
+ !
+ !* close namelist file
+ !
+ CALL CLOSE_NAMELIST(HPROGRAM,INAM)
+ !
+ENDIF
+!
+IF (IMI.NE.-1) THEN
+ CALL UPDATE_NAM_ISBAn(IO)
+ CALL UPDATE_NAM_ISBA_AGSn(IO)
+ CALL UPDATE_NAM_SGH_ISBAn(IO)
+ CALL UPDATE_NAM_DIAG_ISBAn(DE, DGO, DMI, DUI)
+ CALL UPDATE_NAM_DIAG_SURFn(DGO)
+ CALL UPDATE_NAM_CH_CONTROLn(CHI)
+ CALL UPDATE_NAM_CH_ISBAn(CHI,MGN)
+ CALL UPDATE_NAM_ISBA_CCn(IO)
+ CALL UPDATE_NAM_ISBA_SNOWn(IO)
+ CALL UPDATE_NAM_ISBA_NUDGINGn(IO)
+ENDIF
+!
+!-------------------------------------------------------------------------------
+!
+!* surface time-step forced by the atmosphere
+!
+!XTSTEP = XUNDEF
+!
+!-------------------------------------------------------------------------------
+!
+IF (LHOOK) CALL DR_HOOK('READ_ISBA_CONF_N',1,ZHOOK_HANDLE)
+!-------------------------------------------------------------------------------
+!
+END SUBROUTINE READ_ISBA_CONF_n

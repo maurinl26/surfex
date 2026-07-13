@@ -1,0 +1,563 @@
+!SFX_LIC Copyright 1994-2014 CNRS, Meteo-France and Universite Paul Sabatier
+!SFX_LIC This is part of the SURFEX software governed by the CeCILL-C licence
+!SFX_LIC version 1. See LICENSE, CeCILL-C_V1-en.txt and CeCILL-C_V1-fr.txt
+!SFX_LIC for details. version 1.
+!##################
+MODULE MODD_ISBA_OPTIONS_n
+!##################
+!
+!!****  *MODD_ISBA - declaration of packed surface parameters for ISBA scheme
+!!
+!!    PURPOSE
+!!    -------
+!
+!!
+!!**  IMPLICIT ARGUMENTS
+!!    ------------------
+!!      None
+!!
+!!    REFERENCE
+!!    ---------
+!!
+!!    AUTHOR
+!!    ------
+!!      A. Boone   *Meteo France*
+!!
+!!    MODIFICATIONS
+!!    -------------
+!!      Original       20/09/02
+!!      A.L. Gibelin      04/2009 : BIOMASS and RESP_BIOMASS arrays
+!!      A.L. Gibelin      04/2009 : TAU_WOOD for NCB option
+!!      A.L. Gibelin      05/2009 : Add carbon spinup
+!!      A.L. Gibelin      06/2009 : Soil carbon variables for CNT option
+!!      A.L. Gibelin      07/2009 : Suppress RDK and transform GPP as a diagnostic
+!!      A.L. Gibelin      07/2009 : Suppress PPST and PPSTF as outputs
+!!      P. Samuelsson     02/2012 : MEB
+!!      B. Decharme       11/2017 : simplify carbon spinup procedure (delete LAGRI_TO_GRASS XCO2_START XCO2_END)
+!!      B. Decharme       08/2016 : soil grid optimization key
+!!      B. Decharme       04/2020 : New soil carbon scheme (Morel et al. 2019 JAMES) under CRESPSL = DIF option
+!!      B. Decharme       04/2020 : Soil gas scheme (Morel et al. 2019 JAMES) under LSOILGAS = T
+!!      J. Colin          08/2016 : Snow and soil moisture nudging
+!!      Séférian/Decharme 08/2016 : Fire, carbon leachin and landuse module
+!!      R. Seferian       11/2017 : downregulation parameterization of CO2 assimilation
+!!      P. Le Moigne      02/2023 : multi-layer soil texture
+!!      B. Decharme       12/2023 : CHORT='CM6' -> Tuning for CNRM-CM/ESM to reduce the too earlier
+!!                                                 spring time snowmelt due to the non representation
+!!                                                 of vegetation-snow interaction and thus to prevent
+!!                                                 soil ice to thaw before snowmelt. Obsolete with MEB.
+!!      B. Decharme       12/2023 : LNITRO_DILU to CNITRO_DILU
+!!      P. Le Moigne      12/2023 : Roughness length for heat Zilitinkevich
+!!      B.Marti, A.Boone  06/2025 : added DSL soil res option
+!!
+!-------------------------------------------------------------------------------
+!
+!*       0.   DECLARATIONS
+!             ------------
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+!-------------------------------------------------------------------------------
+TYPE ISBA_OPTIONS_t
+!-------------------------------------------------------------------------------
+!
+! *  General PGD options
+!
+LOGICAL :: LECOCLIMAP         ! T: parameters computed from ecoclimap
+!                             ! F: they are read in the file
+!
+LOGICAL :: LPAR               ! T: parameters computed from ecoclimap
+!                             ! F: they are read in the file
+!
+INTEGER :: NPATCH             ! maximum number of sub-tiles (patches)
+!                             ! used at any grid point within a
+!                             ! natural surface fraction
+INTEGER :: NGROUND_LAYER      ! number of ground layers
+!
+INTEGER :: NSAND_LAYER        ! number of sand layers
+!
+INTEGER :: NCLAY_LAYER        ! number of clay layers
+!
+ CHARACTER(LEN=3) :: CISBA    ! type of ISBA version:
+!                             ! '2-L' (default)
+!                             ! '3-L'
+!                             ! 'DIF'
+ CHARACTER(LEN=4) :: CPEDOTF  ! NOTE: Only used when HISBA = DIF
+!                             ! 'CH78' = Clapp and Hornberger 1978 for BC (Default)
+!                             ! 'CO84' = Cosby et al. 1988 for BC
+ CHARACTER(LEN=3) :: CPHOTO   ! type of photosynthesis
+!                             ! 'NON'
+!                             ! 'AST'
+!                             ! 'NIT'
+!                             ! 'NCB'
+CHARACTER(LEN=3)  :: CGNDRES  ! Activate (type of) Ground Resistance
+!                             ! 'NON'
+!                             ! 'S92' = Sellers et al. 1992 type
+!                             ! 'DSL' = Dry Soil Layer (B. Marti)
+!
+REAL, POINTER, DIMENSION(:)  :: XSOILGRID  ! Soil layer grid as reference for DIF
+!
+LOGICAL :: LTR_ML             ! new radiative transfert
+!
+REAL :: XRM_PATCH             ! threshold to remove little fractions of patches
+!
+LOGICAL :: LSOCP              ! Soil organic carbon profile data
+LOGICAL :: LCTI               ! Topographic index data
+LOGICAL :: LPERM              ! Permafrost distribution data
+LOGICAL :: LNOF               ! SOILNOX
+!
+! Type of vegetation (simplification of vegetation charaterization)
+!
+CHARACTER(LEN=4)             :: CTYPE_HVEG   ! type of high vegetation
+CHARACTER(LEN=4)             :: CTYPE_LVEG   ! type of low vegetation
+CHARACTER(LEN=4)             :: CTYPE_NVEG   ! type of bare soil (no vegetation)
+CHARACTER(LEN=5)             :: CTYP_COV     ! type of green roof
+!
+
+! * PGD MEB OPTIONS
+!
+LOGICAL, POINTER, DIMENSION(:) :: LMEB_PATCH  ! Vector with T/F values
+                                              ! True = treat patch with multi-energy balance
+                                              ! False = treat patch with classical ISBA
+LOGICAL                        :: LFORC_MEASURE ! True = Forcing data from observations
+!                                               ! False = Forcing data from atmospheric model (default)
+LOGICAL                        :: LMEB_LITTER ! Activate Litter
+LOGICAL                        :: LMEB_TALL_VEG ! Activate vertical scaling for tall vegetation (default F)
+LOGICAL                        :: LMEB_INT_PLUN ! Activate Raleigh & Lundquist (2012) intercepted snow melt option (default F)
+LOGICAL                        :: LMEB_INT_ULUN ! Activate Lundquist (2021) intercepted snow unloading option (default F)
+LOGICAL                        :: LMEB_INT_USFC ! Activate (aged) snow properties for unloading snow
+!                                               ! as opposed to using falling snow properties (default F)
+!
+CHARACTER(LEN=3)  :: CMEB_GNDRES ! Activate (type of) Ground Resistance for MEB
+!                             ! 'NON'
+!                             ! 'S92' = Sellers et al. 1992 type
+!                             ! 'DSL' = Dry Soil Layer (B. Marti)
+!-------------------------------------------------------------------------------
+!
+! * General PREP options
+!
+LOGICAL :: LCANOPY ! T: SBL scheme within the canopy
+!                  ! F: no atmospheric layers below forcing level
+!
+! * Carbon PREP options
+ CHARACTER(LEN=3) :: CRESPSL  ! Soil respiration
+!                             ! 'DEF' = Default: Norman (1992)
+!                             ! 'PRM' = New Parameterization
+!                             ! 'CNT' = CENTURY model (Gibelin 2007)
+!                             ! 'DIF' = Explicit soil carbon scheme (Morel et al. 2019 JAMES)
+!
+!
+!-------------------------------------------------------------------------------
+!
+! * General MODEL options
+!
+ CHARACTER(LEN=4) :: CC1DRY   ! C1 formulation for dry soils
+!                             ! 'DEF ' = DEFault: Giard-Bazile formulation
+!                             ! 'GB93' = Giordani 1993, Braud 1993
+!                             ! discontinuous at WILT
+ CHARACTER(LEN=4) :: CSCOND   ! Thermal conductivity
+!                             ! 'DEF ' = DEFault: NP89 implicit method
+!                             ! 'PL98' = Peters-Lidard et al. 1998 used
+!                             ! for explicit computation of CG
+ CHARACTER(LEN=3) :: CSOILFRZ ! soil freezing-physics option
+!                             ! 'DEF' = Default (Boone et al. 2000;
+!                             !        Giard and Bazile 2000)
+!                             ! 'LWT' = Phase changes as above,
+!                             !         but relation between unfrozen
+!                             !         water and temperature considered
+ CHARACTER(LEN=4) :: CDIFSFCOND ! Mulch effects
+!                               ! 'MLCH' = include the insulating effect of
+!                               ! leaf litter/mulch on the surf. thermal cond.
+!                               ! 'DEF ' = no mulch effect
+!                               NOTE: Only used when YISBA = DIF
+ CHARACTER(LEN=3) :: CSNOWRES   ! Turbulent exchanges over snow
+!                               ! 'DEF' = Default: Louis (ISBA)
+!                               ! 'RIL' = Maximum Richardson number limit
+!                               !         for stable conditions ISBA-SNOW3L
+!                               !         turbulent exchange option
+ CHARACTER(LEN=4) :: CALBEDO    ! albedo type
+!                               ! 'DRY '
+!                               ! 'EVOL'
+!                               ! 'WET '
+!                               ! 'USER'
+!                            NOTE that when using the YISBA='DIF' multi-layer soil option,
+!                            the 'LWT' method is used. It is only an option
+!                            when using the force-restore soil method ('2-L' or '3-L')
+ CHARACTER(LEN=3) :: CCPSURF    ! specific heat at surface
+!                               ! 'DRY' = default value (dry Cp)
+!                               ! 'HUM' = Cp as a fct of specific humidity
+ CHARACTER(LEN=3) :: CZ0HEAT    ! roughness length for heat
+!                               ! 'DEF' = default value
+!                               ! 'Z95' = z0h as a function of u* (Zilitinkevich 1995)
+!
+REAL :: XOUT_TSTEP              ! ISBA output writing time step
+REAL :: XTSTEP                  ! ISBA time step
+REAL :: XCGMAX                  ! maximum soil heat capacity
+REAL :: XCDRAG                  ! drag coefficient in canopy
+REAL :: XCVHEATF                ! Factor to restore explicit Cv value (DIF option)
+REAL :: XZ0HEAT                 ! Factor to calculate Z0H when CZ0HEAT='Z95'
+!
+LOGICAL :: LGLACIER             ! True = Over permanent snow and ice,
+!                                 initialise WGI=WSAT,
+!                                 Hsnow>=10m and allow 0.8<SNOALB<0.85
+                                ! False = No specific treatment
+LOGICAL :: LCANOPY_DRAG         ! T: drag activated in SBL scheme within the canopy
+!                               ! F: no drag activated in SBL atmospheric layers
+LOGICAL :: LVEGUPD              ! True = update vegetation parameters every decade
+LOGICAL :: LPERTSURF            ! True  = apply random perturbations for ensemble prediction
+                                ! False = no random perturbation (default)
+!
+LOGICAL :: LTEMP_ARP      ! True  = time-varying force-restore soil temperature (as in ARPEGE)
+                          ! False = No time-varying force-restore soil temperature (Default
+!                          
+INTEGER :: NTEMPLAYER_ARP ! Number of force-restore soil temperature layer, including Ts (Default = 4)
+                          ! Only used if LTEMP_ARP=True
+!
+REAL, POINTER, DIMENSION(:) ::  XSODELX       ! Pulsation for each layer (Only used if LTEMP_ARP=True)
+!
+!-------------------------------------------------------------------------------
+!
+! * SGH model options
+!
+! - Adjustable physical parameters
+!
+INTEGER :: NLAYER_HORT
+INTEGER :: NLAYER_DUN
+!
+! - Sub-grid hydrology and vertical hydrology
+!
+ CHARACTER(LEN=4) :: CRUNOFF ! surface runoff formulation
+!                            ! 'WSAT'
+!                            ! 'DT92'
+!                            ! 'SGH ' Topmodel
+!
+ CHARACTER(LEN=3) :: CKSAT   ! ksat
+!                            ! 'DEF' = default value
+!                            ! 'SGH' = profil exponentiel
+!
+LOGICAL :: LSOC              ! soil organic carbon effect
+!                            ! False = default value
+!                            ! True  = soil SOC profil
+!
+CHARACTER(LEN=3) :: CRAIN    ! Rainfall spatial distribution
+                             ! 'DEF' = No rainfall spatial distribution
+                             ! 'SGH' = Rainfall exponential spatial distribution
+                             !
+!
+CHARACTER(LEN=3) :: CHORT    ! Horton runoff
+                             ! 'DEF' = no Horton runoff
+                             ! 'SGH' = Horton runoff
+                             ! 'CM6' = Tuning for CNRM-CM/ESM to reduce the too earlier spring
+                             !         time snowmelt due to the non representation of vegetation-snow
+                             !         interaction and thus to prevent soil ice to thaw before snowmelt.
+                             !         Obsolete with MEB.
+!
+!-------------------------------------------------------------------------------
+!
+! * AGS options
+!
+CHARACTER(LEN=4) :: CNITRO_DILU ! nitrogen dilution fct of CO2
+                                ! 'NONE' = default
+                                ! 'CA08' = Calvet et al. (2008) as default
+                                ! 'ESM2' = ISBA-CC version for CNRM-ESM2
+!
+INTEGER :: NNBIOMASS         ! number of biomass pools
+!
+REAL    :: XCNLIM            ! carbon-nitrogen limitation (-)
+!
+LOGICAL :: LDOWNREGU         ! downregulation parameterization of CO2 assimilation
+!
+!-------------------------------------------------------------------------------
+!
+! * ISBA Carbon Cycle options
+!
+INTEGER :: NNLITTER     ! number of litter pools
+INTEGER :: NNLITTLEVS   ! number of litter levels
+INTEGER :: NNSOILCARB   ! number of soil carbon pools
+!
+REAL    :: XMISSFCO2    ! Missing carbon flux required for ESM coupling (kgc/m2/s)
+!
+! - Spinup
+!
+LOGICAL :: LSPINUPCARBS  ! T: do the soil carb spinup, F: no
+REAL    :: XSPINMAXS     ! max number of times CARBON_SOIL subroutine is
+                         ! called for each timestep in simulation during
+                         ! acceleration procedure number
+!
+INTEGER :: NNBYEARSPINS   ! nbr years needed to reaches soil equilibrium
+INTEGER :: NNBYEARSOLD    ! nbr years executed at curent time step
+INTEGER :: NSPINS         ! number of times the soil is accelerated
+!
+! - Biomass fire
+!
+LOGICAL :: LFIRE          ! True  = Fire disturbance scheme
+                          ! False = default
+!
+! - Land-use Land cover
+!
+LOGICAL :: LLULCC         ! Land-use Land cover change scheme
+LOGICAL :: LLULU          ! Logical to perform luluccf computation when PATCHs distribution has changed
+LOGICAL :: LLULCC_MANAGE  ! Land-use Land cover change managing
+
+INTEGER :: NNDECADAL      ! number of anth carbon pools managed over at decadal time scale
+INTEGER :: NNCENTURY      ! number of anth carbon pools managed over at centennial time scale
+
+!
+! - Riverine carbon
+!
+LOGICAL :: LCLEACH        ! True  = Dissolved carbon leaching scheme
+                          ! False = default
+!
+! - Soil carbon dynamic
+!
+LOGICAL :: LADVECT_SOC  ! Soil carbon advection in peatland
+LOGICAL :: LCRYOTURB    ! Soil carbon cryoturbation in permafrost area
+LOGICAL :: LBIOTURB     ! Soil carbon bioturbation elsewhere
+!
+! - Soil gas
+!
+LOGICAL :: LSOILGAS       ! True  = soil gas scheme
+                          ! False = default
+!
+!-------------------------------------------------------------------------------
+!
+! * Snow model options
+!
+! Snow drift scheme
+CHARACTER(4) :: CSNOWDRIFT  ! Mechanical transformation of snow grain and compaction + effect of wind
+                            ! on falling snow properties
+                            !    'NONE': No snowdrift scheme
+                            !    'DFLT': falling snow falls as purely dendritic
+                            !    'GA01': Gallee et al 2001
+                            !    'VI13': Vionnet et al 2013
+                            !    'PAPP': failing snow properties same as 'NONE' + threshold wind speed for snowdrift computed by
+                            !    SnowPappus
+LOGICAL :: LSNOWDRIFT_SUBLIM ! Logicals for snowdrift and sublimation
+
+LOGICAL :: LSNOW_ABS_ZENITH  ! if True modify solar absorption as a function of solar zenithal angle
+                             ! (physically wrong but better results in polar regions when CSNOWRAD=B92)
+LOGICAL :: LSNOWSYTRON ! Logicals to activate Sytron wind-induced snow redistribution scheme
+                                                ! Work only in the conceptual representation of the topography of the French
+                                                ! operational chain for avalanche hazard forecasting
+!-------------------------------------------------------------------------------
+LOGICAL :: LSNOWPAPPUS ! Logicals to activate Pappus wind-induced snow redistribution scheme
+! Snow management options	20160211
+LOGICAL :: LSNOWCOMPACT_BOOL, LSNOWMAK_BOOL, LSNOWMAK_PROP, LSNOWTILLER, LSELF_PROD
+LOGICAL,  DIMENSION(9500) :: LPRODSNOWMAK
+!
+! Scheme of snow metamorphism (Crocus)
+CHARACTER(3) :: CSNOWMETAMO !  B21, C13, T07, F06 (see Carmagnola et al 2014)
+!
+! Scheme of snow mobility (Sytron)
+CHARACTER(4) :: CSNOWMOB ! GM98 (historical version, Guyomarc'h et Mérindol (1998)), VI12 (see Vionnet et al 2012)
+!
+! radiative transfer scheme in snow (Crocus)
+CHARACTER(3) :: CSNOWRAD    ! B92 (historical version, Brun et al 92), TAR, TA1, TA2 (see Libois et al 2013)
+LOGICAL      :: LATMORAD ! activate atmotartes scheme
+! New multiphysics Crocus options, Cluzet et al 2016
+CHARACTER(3)          :: CSNOWFALL ! V12 (Vionnet et al. 2012) , A76 (Anderson 1976), S02 (Lehning and al. 2002), P75 (Pahaut 1975)
+CHARACTER(3)          :: CSNOWCOND ! Y81 (Yen 1981), I02 (Boone et al. 2002) C11 (Calonne et al. 2011)
+CHARACTER(3)          :: CSNOWHOLD ! B92 (Brun et al. 1992) O04 (Oleson et al., 2004) S02 (SNOWPACK, Lehning et al, 2002) B02 (ISBA_ES, Boone et al. 2002)
+CHARACTER(3)          :: CSNOWCOMP ! B92 snow compaction basis version and B93 for slightly different parameters
+CHARACTER(3)          :: CSNOWZREF ! CST (constant from snow surface, i.e. Col de Porte) or VAR (variable from snow
+                                   ! surface = snow depth has to be removed from reference height)
+CHARACTER(3)          :: CSNOWPAPPUSERODEPO ! 'ERO' : pure erosion in snowpappus, 'DEPO' : pure deposition, 'DIV' : ero/depo calculated
+CHARACTER(3)          :: CSALTPAPPUS  ! 'P90' : Saltation transport given by Pomeroy 1990 formulation, 'S04' : Sorensen 2004 - Vionnet 2012
+                                      ! formulation. More details about it in Baron et al. 2023 Snowpappus description paper
+CHARACTER(4)          :: CSNOWFPAPPUS ! 'NONE' no influence on freshly fallen snow parametrisation, 'GM98' forces Guyomarch and Merindol
+                                      ! parametrisation ( 'old version' in Vionnet 2013 ) , 'VI13' forces Vionnet 2013 'new version' parametrisation
+CHARACTER(4)          :: CPAPPUSSUBLI ! 'NONE' : no sublimation in pappus transport scheme, 'SBSM': SBSM sublimation parametrisation
+                                      ! 'B9810': BINTANJA_98 with 10m wind , 'B9803' : BINTANJA_98 with 3m wind, 'GR06' :  Gordon 2006 SUBLI
+CHARACTER(4)          :: CLIMVFALL    ! 'DEND' fall speed of blowing snow particles is computed as old snow if snow is non-dendritic,
+                                      ! 'PREC' old snow = non-dendritic OR age < XAGELIMPAPPUS2
+                                      ! 'MIXT' old snow for non-dendritic, new snow for dendritic& age<XAGELIMPAPPUS2 , weighted average if
+                                      ! dendritic more aged snow
+LOGICAL :: LPAPPULIMTFLUX !True = snow transport flux limitation activated
+LOGICAL :: LPAPPUDEBUG ! TRUE = activate debug mode and output in snowpappus
+!-------------------------------------------------------------------------------
+!
+! * ISBA-CTRIP coupling option
+!
+LOGICAL :: LFLOOD       ! Activation of the flooding scheme
+LOGICAL :: LWTD         ! Activation of Water table depth coupling
+LOGICAL :: LCPL_RRM     ! Activation of the coupling
+!
+!-------------------------------------------------------------------------------
+!
+! * ISBA land surface Nudging
+!
+! - Snow
+!
+LOGICAL                           :: LNUDG_SWE        ! Activation of the snow's nudging
+LOGICAL                           :: LNUDG_SWE_MASK   ! Over a mask
+REAL                              :: XTRELAX_SWE      ! Relax. time for the snow's nudging
+!
+! - Total soil water-
+!                                                     
+CHARACTER(LEN=3)                  :: CNUDG_WG         ! Activation of the water's nudging
+!                                                     ! 'DEF' default = no nudging
+!                                                     ! 'DAY' daily nudging
+!                                                     ! 'MTH' Monthly nudging
+!
+LOGICAL                           :: LNUDG_WG_MASK    ! Over a mask
+REAL                              :: XTRELAX_WG       ! Relax time for the water's nudging
+REAL, DIMENSION(100)              :: XNUDG_Z_WG       ! Vertical profile of nudging
+!
+!-------------------------------------------------------------------------------
+!
+!-------------------------------------------------------------------------------
+END TYPE ISBA_OPTIONS_t
+!-------------------------------------------------------------------------------
+!
+CONTAINS
+!
+!-------------------------------------------------------------------------------
+!
+SUBROUTINE ISBA_OPTIONS_INIT(IO)
+TYPE(ISBA_OPTIONS_t), INTENT(INOUT) :: IO
+REAL(KIND=JPRB) :: ZHOOK_HANDLE
+IF (LHOOK) CALL DR_HOOK("MODD_ISBA_OPTIONS_N:ISBA_OPTIONS_INIT",0,ZHOOK_HANDLE)
+!
+NULLIFY(IO%XSOILGRID)
+NULLIFY(IO%LMEB_PATCH)
+!
+IO%CTYPE_HVEG='    '
+IO%CTYPE_LVEG='    '
+IO%CTYPE_NVEG='    '
+IO%CTYP_COV='     '
+IO%LPAR=.FALSE.
+IO%LECOCLIMAP=.FALSE.
+IO%NPATCH=0
+IO%NGROUND_LAYER=0
+IO%NSAND_LAYER=0
+IO%NCLAY_LAYER=0
+IO%CISBA=' '
+IO%CPEDOTF=' '
+IO%CPHOTO=' '
+IO%CGNDRES=' '
+IO%LTR_ML=.FALSE.
+IO%XRM_PATCH=0.0
+IO%LSOCP=.FALSE.
+IO%LCTI=.FALSE.
+IO%LPERM=.FALSE.
+IO%LNOF=.FALSE.
+IO%LFORC_MEASURE=.FALSE.
+IO%LMEB_LITTER=.FALSE.
+IO%CMEB_GNDRES=' '
+IO%LMEB_TALL_VEG=.FALSE.
+IO%LMEB_INT_PLUN=.FALSE.
+IO%LMEB_INT_ULUN=.FALSE.
+IO%LMEB_INT_USFC=.FALSE.
+!
+IO%LCANOPY=.FALSE.
+IO%CRESPSL=' '
+!
+IO%CC1DRY=' '
+IO%CSCOND=' '
+IO%CSOILFRZ=' '
+IO%CDIFSFCOND=' '
+IO%CSNOWRES=' '
+IO%CALBEDO=' '
+IO%CCPSURF=' '
+IO%CZ0HEAT=' '
+IO%XOUT_TSTEP=0.
+IO%XTSTEP=0.
+IO%XCGMAX=0.
+IO%XCDRAG=0.
+IO%XCVHEATF=0.2
+IO%XZ0HEAT=0.
+IO%LGLACIER=.FALSE.
+IO%LCANOPY_DRAG=.FALSE.
+IO%LVEGUPD=.FALSE.
+IO%LPERTSURF=.FALSE.
+IO%LTEMP_ARP=.FALSE.
+IO%NTEMPLAYER_ARP=0
+IO%NLAYER_HORT=2
+IO%NLAYER_DUN=2
+!
+IO%CRUNOFF=' '
+IO%CKSAT=' '
+IO%CRAIN=' '
+IO%CHORT=' '
+IO%LSOC=.FALSE.
+!
+IO%NNBIOMASS=0
+IO%CNITRO_DILU=' '
+IO%LDOWNREGU=.FALSE.
+IO%XCNLIM=0
+!
+IO%NNLITTER=0
+IO%NNLITTLEVS=0
+IO%NNSOILCARB=0
+IO%LSPINUPCARBS=.FALSE.
+IO%XSPINMAXS=0.
+IO%NNBYEARSPINS=0
+IO%NNBYEARSOLD=0
+IO%NSPINS=1
+!
+IO%LSOILGAS=.FALSE.
+IO%LFIRE=.FALSE.
+IO%LLULCC=.FALSE.
+IO%LLULU=.FALSE.
+IO%NNDECADAL=0
+IO%NNCENTURY=0
+IO%LCLEACH=.FALSE.
+IO%LADVECT_SOC=.FALSE.
+IO%LCRYOTURB=.FALSE.
+IO%LBIOTURB=.FALSE.
+IO%LADVECT_SOC=.FALSE.
+IO%LCRYOTURB=.FALSE.
+IO%LBIOTURB=.FALSE.
+IO%XMISSFCO2=0.
+!
+IO%CSNOWDRIFT='DFLT'
+IO%LSNOWDRIFT_SUBLIM=.FALSE.
+IO%LSNOWSYTRON=.FALSE.
+IO%LSNOWPAPPUS=.FALSE.
+IO%CSNOWPAPPUSERODEPO='DIV'
+IO%CSNOWFPAPPUS='NONE'
+IO%CPAPPUSSUBLI='NONE'
+IO%CSALTPAPPUS='P90'
+IO%CLIMVFALL='MIXT'
+IO%LPAPPULIMTFLUX=.FALSE.
+IO%LPAPPUDEBUG=.FALSE.
+!
+! 20160211
+IO%LSNOWCOMPACT_BOOL=.FALSE.
+IO%LSNOWMAK_BOOL=.FALSE.
+IO%LPRODSNOWMAK=.FALSE.
+IO%LSNOWMAK_PROP=.FALSE.
+IO%LSNOWTILLER=.FALSE.
+IO%LSELF_PROD=.FALSE.
+IO%LSNOW_ABS_ZENITH=.FALSE.
+IO%CSNOWMETAMO='B21'
+IO%CSNOWMOB='GM98'
+IO%CSNOWRAD='B92'
+IO%LATMORAD=.FALSE.
+IO%CSNOWFALL='V12'
+IO%CSNOWCOND='Y81'
+IO%CSNOWHOLD='B92'
+IO%CSNOWCOMP='B92'
+IO%CSNOWZREF='CST'
+!
+IO%LFLOOD=.FALSE.
+IO%LWTD=.FALSE.
+IO%LCPL_RRM=.FALSE.
+!
+IO%LNUDG_SWE=.FALSE.
+IO%LNUDG_SWE_MASK=.FALSE.
+IO%XTRELAX_SWE=86400.
+!
+IO%CNUDG_WG='   '
+IO%LNUDG_WG_MASK=.FALSE.
+IO%XTRELAX_WG=86400.
+IO%XNUDG_Z_WG=1.0
+!
+IF (LHOOK) CALL DR_HOOK("MODD_ISBA_OPTIONS_N:ISBA_OPTIONS_INIT",1,ZHOOK_HANDLE)
+END SUBROUTINE ISBA_OPTIONS_INIT
+!
+!-------------------------------------------------------------------------------
+!
+END MODULE MODD_ISBA_OPTIONS_n

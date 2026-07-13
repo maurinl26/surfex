@@ -1,0 +1,117 @@
+!SFX_LIC Copyright 1994-2014 CNRS, Meteo-France and Universite Paul Sabatier
+!SFX_LIC This is part of the SURFEX software governed by the CeCILL-C licence
+!SFX_LIC version 1. See LICENSE, CeCILL-C_V1-en.txt and CeCILL-C_V1-fr.txt
+!SFX_LIC for details. version 1.
+!     #########
+SUBROUTINE READ_NAMELISTS_ISBA_n (IM, HPROGRAM, HINIT)
+!     #######################################################
+!
+!!      P. Le Moigne 12/2023 : Roughness length for heat Zilitinkevich
+!---------------------------
+!
+!
+USE MODD_SURFEX_n, ONLY : ISBA_MODEL_t
+!
+USE MODD_SURF_PAR, ONLY : XUNDEF
+!
+USE MODN_ISBA_n
+!
+USE MODN_SOILTEMP_ARP
+!
+USE MODI_GET_LUOUT
+USE MODI_OPEN_NAMELIST
+USE MODI_CLOSE_NAMELIST
+USE MODE_POS_SURF
+!
+USE MODI_DEFAULT_ISBA
+USE MODI_DEFAULT_CH_DEP
+USE MODI_DEFAULT_CH_BIO_FLUX
+USE MODI_DEFAULT_DIAG_ISBA
+USE MODI_DEFAULT_CROCUS
+USE MODI_DEFAULT_ISBA_NUDGING
+!
+USE MODI_READ_DEFAULT_ISBA_n
+USE MODI_READ_ISBA_CONF_n
+!
+USE MODI_READ_NAM_PREP_ISBA_n
+!
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+!
+TYPE(ISBA_MODEL_t), INTENT(INOUT) :: IM
+!
+ CHARACTER(LEN=6),   INTENT(IN)  :: HPROGRAM  ! program calling surf. schemes
+ CHARACTER(LEN=3),   INTENT(IN)  :: HINIT     ! choice of fields to initialize
+!
+INTEGER :: ILUNAM         ! logical unit of namelist file
+INTEGER :: ILUOUT
+LOGICAL :: GFOUND         ! Return code when searching namelist
+REAL(KIND=JPRB) :: ZHOOK_HANDLE
+!
+!------------------------------------
+!
+IF (LHOOK) CALL DR_HOOK('READ_NAMELISTS_ISBA_N',0,ZHOOK_HANDLE)
+ CALL DEFAULT_ISBA(XTSTEP, XOUT_TSTEP,                            &
+                     CRUNOFF, CSCOND, CZ0HEAT,                     &
+                     CC1DRY, CSOILFRZ, CDIFSFCOND, CSNOWRES,     &
+                     CCPSURF, XCGMAX, XCDRAG, XZ0HEAT, CKSAT, LSOC,&
+                     CRAIN, CHORT, LGLACIER, LCANOPY_DRAG,       &
+                     LVEGUPD, LSPINUPCARBS, XSPINMAXS,             &
+                     NNBYEARSPINS, CNITRO_DILU, XCVHEATF,          &
+                     LFIRE, LCLEACH, LADVECT_SOC, LCRYOTURB,       &
+                     LBIOTURB, XMISSFCO2, XCNLIM, LDOWNREGU,       &
+                     LLULCC_MANAGE                                 )
+!
+CALL DEFAULT_ISBA_NUDGING(LNUDG_SWE, LNUDG_SWE_MASK,  &
+                          XTRELAX_SWE, CNUDG_WG,      &
+                          LNUDG_WG_MASK, XTRELAX_WG,  &
+                          XNUDG_Z_WG                  )
+!
+ CALL DEFAULT_CH_DEP(CCH_DRY_DEP)
+ CALL DEFAULT_CH_BIO_FLUX(LCH_BIO_FLUX)
+!
+ CALL DEFAULT_DIAG_ISBA(N2M,LSURF_BUDGET,L2M_MIN_ZS,LRAD_BUDGET,  &
+                       LCOEF,LSURF_VARS,LSURF_EVAP_BUDGET,        &
+                       LSURF_MISC_BUDGET,LSURF_DIAG_ALBEDO,       &
+                       LSURF_BUDGETC,LSURF_MISC_DIF,LPATCH_BUDGET,&
+                       LUTCI,LPGD,LRESET_BUDGETC,LWATER_BUDGET,   &
+                       LENERGY_BUDGET,LPROSNOW,LPROBANDS,         &
+                       LVOLUMETRIC_SNOWLIQ,LSPECMOD,XDIAG_TSTEP,  &
+                       LLUTILES_BUDGET                            )
+!
+ CALL DEFAULT_CROCUS(CSNOWDRIFT,LSNOWDRIFT_SUBLIM,LSNOW_ABS_ZENITH,        &
+                     CSNOWMETAMO,CSNOWRAD,LATMORAD,LSNOWSYTRON,LSNOWPAPPUS,&
+                     CSNOWPAPPUSERODEPO,CSNOWFPAPPUS,CPAPPUSSUBLI,         &
+                     CSALTPAPPUS,CLIMVFALL,LPAPPULIMTFLUX,LPAPPUDEBUG,     &
+                     CSNOWFALL,CSNOWCOND, CSNOWHOLD,CSNOWCOMP,CSNOWZREF,   &
+                     LSNOWCOMPACT_BOOL, LSNOWMAK_BOOL,LPRODSNOWMAK,        &
+                     LSNOWMAK_PROP, LSNOWTILLER, LSELF_PROD, CSNOWMOB      )
+
+!
+CALL READ_DEFAULT_ISBA_n(IM%CHI, IM%MGN, IM%ID%DE, IM%ID%O, IM%ID%DM, IM%ID%DU, IM%O, HPROGRAM)
+!
+CALL READ_ISBA_CONF_n(IM%CHI, IM%MGN, IM%ID%DE, IM%ID%O, IM%ID%DM, IM%ID%DU, IM%O, HPROGRAM)
+!
+!
+SODELX(:)      = XUNDEF
+LTEMP_ARP      = .FALSE.
+NTEMPLAYER_ARP = 4
+!
+CALL GET_LUOUT(HPROGRAM,ILUOUT)
+!
+CALL OPEN_NAMELIST(HPROGRAM,ILUNAM)
+CALL POSNAM(ILUNAM,'NAM_SOILTEMP_ARP',GFOUND,ILUOUT)
+IF (GFOUND) READ(UNIT=ILUNAM,NML=NAM_SOILTEMP_ARP)
+CALL CLOSE_NAMELIST(HPROGRAM,ILUNAM)
+!
+IF (HINIT=='PRE') CALL READ_NAM_PREP_ISBA_n(HPROGRAM)
+!
+IF (LHOOK) CALL DR_HOOK('READ_NAMELISTS_ISBA_N',1,ZHOOK_HANDLE)
+!
+!------------------------------------
+!
+END SUBROUTINE READ_NAMELISTS_ISBA_n

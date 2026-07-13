@@ -1,0 +1,1347 @@
+!SFX_LIC Copyright 1994-2014 CNRS, Meteo-France and Universite Paul Sabatier
+!SFX_LIC This is part of the SURFEX software governed by the CeCILL-C licence
+!SFX_LIC version 1. See LICENSE, CeCILL-C_V1-en.txt and CeCILL-C_V1-fr.txt  
+!SFX_LIC for details. version 1.
+MODULE MODE_WRITE_SURF_FA
+!
+USE MODD_IO_SURF_FA
+USE MODN_IO_OFFLINE
+
+INTERFACE WRITE_SURF0_FA
+        MODULE PROCEDURE WRITE_SURFX0_FA
+        MODULE PROCEDURE WRITE_SURFN0_FA
+        MODULE PROCEDURE WRITE_SURFL0_FA
+        MODULE PROCEDURE WRITE_SURFC0_FA
+END INTERFACE
+INTERFACE WRITE_SURFN_FA
+        MODULE PROCEDURE WRITE_SURFX1_FA
+        MODULE PROCEDURE WRITE_SURFN1_FA
+        MODULE PROCEDURE WRITE_SURFL1_FA
+        MODULE PROCEDURE WRITE_SURFX2_FA
+        MODULE PROCEDURE WRITE_SURFX3_FA
+END INTERFACE
+INTERFACE WRITE_SURFT_FA
+        MODULE PROCEDURE WRITE_SURFT0_FA
+        MODULE PROCEDURE WRITE_SURFT2_FA
+END INTERFACE
+
+INTEGER, PARAMETER :: NFLDMAX = 1000
+INTEGER :: NFLDCUR = 0
+INTEGER :: N_FBUF_DIM1 (NFLDMAX)
+INTEGER :: N_FBUF_DIM2 (NFLDMAX)
+CHARACTER (LEN=32) :: C_FBUF_NAME (NFLDMAX)
+CHARACTER (LEN=02) :: C_FBUF_TYPE (NFLDMAX)
+CHARACTER (LEN=16) :: C_FBUF_MASK (NFLDMAX)
+
+PRIVATE :: NFLDMAX, NFLDCUR, N_FBUF_DIM1, N_FBUF_DIM2, C_FBUF_NAME, C_FBUF_TYPE, &
+& FAIDX_ADD, SETNBITS
+
+!
+CONTAINS
+
+      SUBROUTINE FAIDX_ADD (CDNAME, CDTYPE, CDMASK, KDIM1, KDIM2)
+      IMPLICIT NONE
+      CHARACTER (LEN=*) :: CDNAME, CDTYPE, CDMASK
+      INTEGER :: KDIM1, KDIM2
+
+      INTEGER :: I
+
+      DO I = 1, NFLDCUR
+        IF (C_FBUF_NAME (I) == CDNAME) RETURN
+      ENDDO
+
+      NFLDCUR = NFLDCUR + 1
+      C_FBUF_NAME (NFLDCUR) = CDNAME
+      C_FBUF_TYPE (NFLDCUR) = CDTYPE
+      C_FBUF_MASK (NFLDCUR) = CDMASK
+      N_FBUF_DIM1 (NFLDCUR) = KDIM1
+      N_FBUF_DIM2 (NFLDCUR) = KDIM2
+
+      END SUBROUTINE FAIDX_ADD
+
+      SUBROUTINE FAIDX_WRT
+      IMPLICIT NONE
+
+      INTEGER :: IRET
+      INTEGER :: I, IND (NFLDCUR)
+
+      IND = (/ (I, I = 1, NFLDCUR) /)
+      CALL QSORTC (NFLDCUR, IND, C_FBUF_NAME)
+
+      C_FBUF_NAME (1:NFLDCUR) = C_FBUF_NAME (IND)
+      C_FBUF_TYPE (1:NFLDCUR) = C_FBUF_TYPE (IND)
+      C_FBUF_MASK (1:NFLDCUR) = C_FBUF_MASK (IND)
+      N_FBUF_DIM1 (1:NFLDCUR) = N_FBUF_DIM1 (IND)
+      N_FBUF_DIM2 (1:NFLDCUR) = N_FBUF_DIM2 (IND)
+
+      CALL WC1 ('_FBUF_NAME', C_FBUF_NAME (1:NFLDCUR))
+      CALL WC1 ('_FBUF_TYPE', C_FBUF_TYPE (1:NFLDCUR))
+      CALL WC1 ('_FBUF_MASK', C_FBUF_MASK (1:NFLDCUR))
+      CALL WN1 ('_FBUF_DIM1', N_FBUF_DIM1 (1:NFLDCUR))
+      CALL WN1 ('_FBUF_DIM2', N_FBUF_DIM2 (1:NFLDCUR))
+      CALL WN0 ('_FBUF_SIZE', NFLDCUR)
+
+      CONTAINS
+
+      SUBROUTINE WC1 (CDNAME, CDSTR)
+      CHARACTER (LEN=*) :: CDNAME
+      CHARACTER (LEN=*) :: CDSTR (:)
+      INTEGER (KIND=8) :: IWORK (LEN (CDSTR (1)) * SIZE (CDSTR))
+
+      INTEGER :: I, J, K
+
+      K = 1
+      DO I = 1, SIZE (CDSTR)
+        DO J = 1, LEN (CDSTR)
+          IWORK (K) = ICHAR (CDSTR (I) (J:J))
+          K = K + 1
+        ENDDO
+      ENDDO
+
+      CALL LFIECR (IRET, NUNIT_FA, TRIM (CPREFIX1D)//CDNAME, IWORK, SIZE (IWORK))
+ 
+      END SUBROUTINE WC1
+
+      SUBROUTINE WN1 (CDNAME, KINT)
+      CHARACTER (LEN=*) :: CDNAME
+      INTEGER :: KINT (:)
+      INTEGER (KIND=8) :: IWORK (SIZE (KINT))
+
+      IWORK = KINT
+
+      CALL LFIECR (IRET, NUNIT_FA, TRIM (CPREFIX1D)//CDNAME, IWORK, SIZE (IWORK))
+
+      END SUBROUTINE WN1
+
+      SUBROUTINE WN0 (CDNAME, KINT)
+      CHARACTER (LEN=*) :: CDNAME
+      INTEGER :: KINT
+      INTEGER (KIND=8) :: IWORK 
+
+      IWORK = KINT
+
+      CALL LFIECR (IRET, NUNIT_FA, TRIM (CPREFIX1D)//CDNAME, IWORK, 1)
+
+      END SUBROUTINE WN0
+
+      END SUBROUTINE FAIDX_WRT
+
+      SUBROUTINE SETNBITS (CDPREF, KNIVAU, CDSUFF)
+
+      USE MODI_OPEN_NAMELIST
+      USE MODI_CLOSE_NAMELIST
+      USE MODE_POS_SURF
+      USE MODN_IO_OFFLINE
+
+      IMPLICIT NONE
+
+      CHARACTER (LEN=*),   INTENT (IN)  :: CDPREF, CDSUFF
+      INTEGER,             INTENT (IN)  :: KNIVAU
+
+      LOGICAL             :: LLNAMSFXCMP = .TRUE.
+      CHARACTER (LEN=16)  :: CFLDNAME (NFLDMAX)
+      INTEGER :: NBBITS (NFLDMAX), NVGRIBSFX
+      SAVE :: LLNAMSFXCMP, CFLDNAME, NBBITS, NVGRIBSFX
+      NAMELIST / NAMSFXCMP / CFLDNAME, NBBITS, NVGRIBSFX
+
+      INTEGER :: I, J, INBITS
+      INTEGER :: ILUNAM
+      INTEGER :: IREP, INGRIB, INBPDG, INBCSP, ISTRON, IPUILA, IDMOPL
+      LOGICAL :: GFOUND
+      CHARACTER (LEN=16) :: CLNOMA
+
+      IF (KNIVAU > 0) THEN
+        WRITE (CLNOMA, '(I3.3)') KNIVAU
+        CLNOMA = TRIM (CDPREF)//TRIM (CLNOMA)//TRIM (CDSUFF)
+      ELSE
+        CLNOMA = TRIM (CDPREF)//TRIM (CDSUFF)
+      ENDIF
+      
+
+      IF (LLNAMSFXCMP) THEN
+        CFLDNAME  = ''
+        NBBITS    = 24
+        NVGRIBSFX = 0
+
+        CALL OPEN_NAMELIST('ASCII ',ILUNAM,CNAMELIST)
+        CALL POSNAM(ILUNAM,'NAMSFXCMP',GFOUND)
+        IF (GFOUND) READ (UNIT=ILUNAM,NML=NAMSFXCMP)
+        CALL CLOSE_NAMELIST('ASCII ',ILUNAM)
+
+        LLNAMSFXCMP = .FALSE.
+      ENDIF
+
+      INBITS = 24
+
+      FLDLOOP : DO I = 1, NFLDMAX
+        DO J = 1, LEN (CLNOMA)
+          IF (CFLDNAME (I) (J:J) == '?') CYCLE
+          IF (CLNOMA (J:J) /= CFLDNAME (I) (J:J)) CYCLE FLDLOOP
+        ENDDO
+        INBITS = NBBITS (I)
+        EXIT FLDLOOP
+      ENDDO FLDLOOP
+
+      CALL FAVEUR (IREP, NUNIT_FA, INGRIB, INBPDG, INBCSP, ISTRON, IPUILA, IDMOPL) 
+
+      INGRIB = NVGRIBSFX
+      INBPDG = INBITS
+
+      CALL FAGOTE (IREP, NUNIT_FA, INGRIB, INBPDG, INBCSP, ISTRON, IPUILA, IDMOPL)
+
+      END SUBROUTINE
+
+      SUBROUTINE FAIENC_NOEXTZ (KREP, KNUMER, CDPREF, KNIVAU, CDSUFF, PCHAMP, LDCOSP, KLCHAM)
+      USE MODD_SURF_PAR,   ONLY : XUNDEF
+      IMPLICIT NONE
+      INTEGER :: KREP, KNUMER, KNIVAU, KLCHAM
+      CHARACTER (LEN=*) :: CDPREF, CDSUFF
+      LOGICAL :: LDCOSP
+      REAL, TARGET :: PCHAMP (:)
+      REAL, POINTER :: ZCHAMP (:)
+#ifdef SFX_FA      
+#include "faieno.h"
+#endif
+      INTEGER :: ITYPTR, ITRONC, INLATI, INXLON, INIVER
+      INTEGER :: INLOPA (1000), INOZPA (1000)
+      REAL :: ZSINLA (1000), ZAHYBR (200), ZBHYBR (200)
+      REAL :: ZSLAPO, ZCLOPO, ZSLOPO, ZCODIL, ZREFER
+      LOGICAL :: LLNOMM, LLERFA, LLIMST, LLMLAM, LLGARD
+      CHARACTER (LEN=256) :: CLNOMF
+      CHARACTER (LEN=16) :: CLSTTU, CLNOMC
+      INTEGER :: INIMES
+      INTEGER :: INXLON_NOEXTZ, INLATI_NOEXTZ
+      INTEGER :: INGRIB, INBPDG, INBCSP, ISTRON, IPUILA, IDMOPL
+      INTEGER :: JLON, JLAT
+      REAL :: ZUNDEF
+
+      CALL FAIOPT (KREP,   KNUMER, LLNOMM, CLNOMF, CLSTTU,  &
+                 & LLERFA, LLIMST, INIMES, CLNOMC)
+
+      CALL FACIES (CLNOMC, ITYPTR, ZSLAPO, ZCLOPO, ZSLOPO, &
+                 & ZCODIL, ITRONC, INLATI, INXLON, INLOPA, &
+                 & INOZPA, ZSINLA, INIVER, ZREFER, ZAHYBR, &
+                 & ZBHYBR, LLGARD)
+      LLMLAM = ITYPTR < 0
+
+
+      IF (LLMLAM) THEN
+
+        IF (CDSUFF == 'XX' .OR. CDSUFF == 'YY' .OR. CDSUFF == 'DX' .OR. CDSUFF == 'DY') THEN
+          ZUNDEF = 1.
+        ELSE
+          ZUNDEF = XUNDEF
+        ENDIF
+
+        ALLOCATE (ZCHAMP (INXLON * INLATI))
+
+        INXLON_NOEXTZ = INLOPA (4)
+        INLATI_NOEXTZ = INLOPA (6)
+
+        DO JLON = 1, INXLON_NOEXTZ
+          DO JLAT = 1, INLATI_NOEXTZ
+            ZCHAMP ((JLAT-1) * INXLON + JLON) = PCHAMP ((JLAT-1) * INXLON_NOEXTZ + JLON) 
+          ENDDO
+        ENDDO
+        DO JLON = INXLON_NOEXTZ+1, INXLON
+          DO JLAT = 1, INLATI
+            ZCHAMP ((JLAT-1) * INXLON + JLON) = ZUNDEF
+          ENDDO
+        ENDDO
+        DO JLON = 1, INXLON
+          DO JLAT = INLATI_NOEXTZ+1, INLATI
+            ZCHAMP ((JLAT-1) * INXLON + JLON) = ZUNDEF
+          ENDDO
+        ENDDO
+
+      ELSE
+        ZCHAMP => PCHAMP
+      ENDIF
+#ifdef SFX_FA  
+      CALL FAIENO (KREP, KNUMER, CDPREF, KNIVAU, CDSUFF, ZCHAMP, LDCOSP, LDUNDF=.TRUE., PUNDF=XUNDEF)
+#endif
+      KLCHAM = SIZE (ZCHAMP)
+
+      IF (LLMLAM) THEN
+        DEALLOCATE (ZCHAMP)
+      ENDIF
+
+      END SUBROUTINE FAIENC_NOEXTZ
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFX0_FA (&
+                                  HREC,PFIELD,KRESP,HCOMMENT)
+!     #############################################################
+!
+!!****  * - routine to write a real scalar
+!
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, CPREFIX1D, LFANOCOMPACT
+USE MODD_SURF_PAR, ONLY : LEN_HREC
+!
+USE MODE_FASURFEX
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),  INTENT(IN) :: HREC     ! name of the article to be read
+REAL,               INTENT(IN) :: PFIELD   ! the real scalar to be read
+INTEGER,            INTENT(OUT):: KRESP    ! KRESP  : return-code if a problem appears
+ CHARACTER(LEN=100), INTENT(IN) :: HCOMMENT ! comment string
+!
+!*      0.2   Declarations of local variables
+!
+LOGICAL :: GFOUND
+ CHARACTER(LEN=18):: YNAME                  ! Field Name
+INTEGER          :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+REAL(KIND=JPRB)  :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:ERROR_WRITE_SURF_FA:WRITE_SURFX0_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+CALL IO_BUFF(HREC,'W',GFOUND)
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX0_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+IF (.NOT. LFAGMAP) THEN
+!
+  IF(LFANOCOMPACT)THEN
+    CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ! -- Pour ecrire sans compactage
+    CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+!
+  YNAME=TRIM(CPREFIX1D)//TRIM(HREC)
+   CALL  FAECR_R(KRESP,NUNIT_FA,YNAME,PFIELD)
+  IF (KRESP/=0) THEN
+    CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+  ENDIF
+!
+  IF(LFANOCOMPACT)THEN
+    ! On remet la valeur par defaut 
+    CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+ELSE
+  CALL FAIDX_ADD (HREC, 'X0', '', -1, -1)
+  CALL LFIECR (KRESP, NUNIT_FA, TRIM(CPREFIX1D)//HREC, PFIELD, 1)
+  IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX0_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFX0_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFN0_FA (&
+                                  HREC,KFIELD,KRESP,HCOMMENT)
+!     #############################################################
+!
+!!****  * - routine to write an integer
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, NMASK, CPREFIX1D, LFANOCOMPACT
+USE MODD_SURF_PAR, ONLY : LEN_HREC
+!
+USE MODE_FASURFEX
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),  INTENT(IN) :: HREC     ! name of the article to be read
+INTEGER,            INTENT(IN) :: KFIELD   ! the integer to be read
+INTEGER,            INTENT(OUT):: KRESP    ! KRESP  : return-code if a problem appears
+ CHARACTER(LEN=100), INTENT(IN) :: HCOMMENT ! comment string
+!
+!*      0.2   Declarations of local variables
+!
+LOGICAL :: GFOUND
+ CHARACTER(LEN=18):: YNAME                  ! Field Name
+INTEGER          :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+INTEGER (KIND=8) :: IWORK
+REAL(KIND=JPRB)  :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFN0_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+CALL IO_BUFF(HREC,'W',GFOUND)
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFN0_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+IF (.NOT. LFAGMAP) THEN
+!
+  IF(LFANOCOMPACT)THEN
+    CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ! -- Pour ecrire sans compactage
+    CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+!
+  YNAME=TRIM(CPREFIX1D)//TRIM(HREC)
+  CALL  FAECR_I(KRESP,NUNIT_FA,YNAME,KFIELD)
+  IF (KRESP/=0) THEN
+    CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+  ENDIF
+!
+  IF(LFANOCOMPACT)THEN
+    ! On remet la valeur par defaut 
+    CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+ELSE
+  CALL FAIDX_ADD (HREC, 'N0', '', -1, -1)
+  IWORK = KFIELD
+  CALL LFIECR (KRESP, NUNIT_FA, CPREFIX1D//TRIM(HREC), IWORK, 1)
+  IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFN0_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFN0_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFL0_FA (&
+                                  HREC,OFIELD,KRESP,HCOMMENT)
+!     #############################################################
+!
+!!****  * - routine to write a logical
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, CPREFIX1D, LFANOCOMPACT
+USE MODD_SURF_PAR, ONLY : LEN_HREC
+!
+USE MODE_FASURFEX
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),  INTENT(IN) :: HREC     ! name of the article to be read
+LOGICAL,            INTENT(IN) :: OFIELD   ! array containing the data field
+INTEGER,            INTENT(OUT):: KRESP    ! KRESP  : return-code if a problem appears
+ CHARACTER(LEN=100), INTENT(IN) :: HCOMMENT ! comment string
+!
+!*      0.2   Declarations of local variables
+!
+LOGICAL :: GFOUND
+ CHARACTER(LEN=18):: YNAME ! Field Name
+INTEGER          :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+INTEGER (KIND=8) :: IWORK
+REAL(KIND=JPRB)  :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFL0_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+CALL IO_BUFF(HREC,'W',GFOUND)
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFL0_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+IF (.NOT. LFAGMAP) THEN
+!
+  IF(LFANOCOMPACT)THEN
+    CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ! -- Pour ecrire sans compactage
+    CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+!
+  YNAME=TRIM(CPREFIX1D)//TRIM(HREC)
+  CALL  FAECR_L(KRESP,NUNIT_FA,YNAME,OFIELD)
+  IF (KRESP/=0) THEN
+    CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+  ENDIF
+!
+  IF(LFANOCOMPACT)THEN
+    ! On remet la valeur par defaut 
+    CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+ELSE
+  CALL FAIDX_ADD (HREC, 'L0', '', -1, -1)
+  IF (OFIELD) THEN
+    IWORK = 1
+  ELSE
+    IWORK = 0
+  ENDIF
+  CALL LFIECR (KRESP, NUNIT_FA, CPREFIX1D//TRIM(HREC), IWORK, 1)
+  IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFL0_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFL0_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFC0_FA (&
+                                  HREC,HFIELD,KRESP,HCOMMENT)
+!     #############################################################
+!
+!!****  * - routine to write a character
+!
+!
+USE MODD_IO_SURF_FA,         ONLY : NUNIT_FA, CPREFIX1D, LFANOCOMPACT
+USE MODD_IO_SURF_LFI,        ONLY : LMNH_COMPATIBLE, LCARTESIAN
+USE MODD_DATA_COVER_PAR,     ONLY : NCAR_FILES
+USE MODD_SURF_PAR, ONLY : LEN_HREC
+!
+USE MODE_FASURFEX
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),          INTENT(IN)  :: HREC      ! name of the article to be read
+ CHARACTER(LEN=NCAR_FILES),  INTENT(IN) :: HFIELD    ! the integer to be read
+INTEGER,                     INTENT(OUT)  :: KRESP     ! KRESP  : return-code if a problem appears
+ CHARACTER(LEN=100),         INTENT(IN)  :: HCOMMENT  ! comment string
+!
+!*      0.2   Declarations of local variables
+!
+LOGICAL :: GFOUND
+CHARACTER,DIMENSION(NCAR_FILES) :: YFIELD
+CHARACTER(LEN=18)               :: YNAME ! Field Name
+CHARACTER(LEN=3)                :: YSIZE_CAR
+INTEGER                  :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+INTEGER (KIND=8), ALLOCATABLE :: IWORK (:)
+INTEGER                  :: J, N
+REAL(KIND=JPRB)          :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFC0_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+ CALL IO_BUFF(HREC,'W',GFOUND)
+IF (GFOUND.AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFC0_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+!
+IF (.NOT. LFAGMAP) THEN
+  IF(LFANOCOMPACT)THEN
+    CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ! -- Pour ecrire sans compactage
+    CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+  !
+  WRITE(YSIZE_CAR,"(I3.2)") NCAR_FILES
+  !
+  READ(HFIELD,'('//TRIM(ADJUSTL(YSIZE_CAR))//'A1)') YFIELD
+  YNAME=TRIM(CPREFIX1D)//TRIM(HREC)
+  CALL  FAECR_C(KRESP,NUNIT_FA,YNAME,NCAR_FILES,YFIELD)
+  IF (KRESP/=0) THEN
+    CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+  ENDIF
+  !
+  IF(LFANOCOMPACT)THEN
+    ! On remet la valeur par defaut 
+    CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+ELSE
+  CALL FAIDX_ADD (HREC, 'C0', '', -1, -1)
+  N = NCAR_FILES
+  ALLOCATE (IWORK (N))
+  DO J = 1, N
+    IWORK (J) = ICHAR (HFIELD (J:J))
+  ENDDO
+  CALL LFIECR (KRESP, NUNIT_FA, TRIM(CPREFIX1D)//HREC, IWORK, SIZE (IWORK))
+  IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+ENDIF
+
+IF (HREC=="GRID_TYPE") LMNH_COMPATIBLE = (HFIELD=="CARTESIAN " .OR. HFIELD=="CONF PROJ ")
+IF (HREC=="GRID_TYPE" .AND. LMNH_COMPATIBLE) LCARTESIAN=(HFIELD=="CARTESIAN ")
+
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFC0_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFC0_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFX1_FA (&
+                                  HREC,KL,PFIELD,KRESP,HCOMMENT,HDIR)
+!     #############################################################
+!
+!!****  * - routine to fill a write 1D array for the externalised surface 
+!
+!
+!
+!
+USE MODD_SURFEX_MPI, ONLY : NRANK, NPIO, XTIME_NPIO_WRITE, WLOG_MPI
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, NMASK, NFULL, CPREFIX1D, &
+                            LFANOCOMPACT 
+USE MODD_SURF_PAR,   ONLY : XUNDEF, LEN_HREC
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+USE MODI_GATHER_AND_WRITE_MPI
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+#ifdef SFX_MPI
+INCLUDE "mpif.h"
+#endif
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),   INTENT(IN) :: HREC     ! name of the article to be read
+INTEGER,             INTENT(IN) :: KL       ! number of points
+REAL, DIMENSION(KL), INTENT(IN) :: PFIELD   ! array containing the data field
+INTEGER,             INTENT(OUT):: KRESP    ! KRESP  : return-code if a problem appears
+CHARACTER(LEN=100),  INTENT(IN) :: HCOMMENT ! comment string
+CHARACTER(LEN=1),    INTENT(IN) :: HDIR     ! type of field :
+                                            ! 'H' : field with
+                                            !       horizontal spatial dim.
+                                            ! '-' : no horizontal dim.
+!*      0.2   Declarations of local variables
+!
+LOGICAL :: GFOUND
+INTEGER                :: I,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+INTEGER                :: ILCHAM
+REAL                   :: ZMEAN, ZCOUNT
+REAL       :: XTIME0
+REAL, DIMENSION(MAX(NFULL,SIZE(PFIELD))) :: ZWORK   ! work array read in the file
+REAL(KIND=JPRB)        :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX1_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+ CALL IO_BUFF(HREC,'W',GFOUND)
+!
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX1_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+!
+IF(HDIR=='H')THEN
+  CALL GATHER_AND_WRITE_MPI(PFIELD,ZWORK,NMASK)
+ELSE !no horizontal dim. case (not masked)
+  ZWORK(1:KL)=PFIELD(1:KL)
+  ZWORK(KL+1:NFULL)=SUM(PFIELD(1:KL))/REAL(KL)
+ENDIF
+!
+IF (NRANK==NPIO) THEN
+  !
+#ifdef SFX_MPI
+  XTIME0 = MPI_WTIME()
+#endif
+  !
+  IF (.NOT. LFAGMAP) THEN
+    IF(LFANOCOMPACT)THEN
+      CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+        ! -- Pour ecrire sans compactage
+      CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+      CALL FAIENC(KRESP,NUNIT_FA,CPREFIX1D,0,HREC,ZWORK,.FALSE.)
+      IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+        ! On remet la valeur par defaut 
+      CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ELSE
+      ZMEAN =0.0
+      ZCOUNT=0.0
+      DO I=1,NFULL
+        IF(ZWORK(I)/=XUNDEF)THEN
+          ZMEAN =ZMEAN+ZWORK(I)
+          ZCOUNT=ZCOUNT+1.0
+        ENDIF
+      ENDDO
+      IF (ZCOUNT.GT.0.0) ZMEAN=ZMEAN/ZCOUNT
+      WHERE(ZWORK(:)==XUNDEF)ZWORK(:)=ZMEAN
+      CALL FAIENC(KRESP,NUNIT_FA,CPREFIX1D,0,HREC,ZWORK,.FALSE.)
+      IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+    ENDIF
+  ELSE
+    CALL SETNBITS (CPREFIX1D, 0, HREC)
+    CALL FAIENC_NOEXTZ (KRESP, NUNIT_FA, CPREFIX1D, 0, HREC, ZWORK, .FALSE., ILCHAM)
+    IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+    CALL FAIDX_ADD (HREC, 'X1', CMASK, ILCHAM, -1)
+  ENDIF
+  !
+#ifdef SFX_MPI
+  XTIME_NPIO_WRITE = XTIME_NPIO_WRITE + (MPI_WTIME() - XTIME0)
+#endif
+  !
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX1_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFX1_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFX2_FA (HREC,KL1,KL2,PFIELD,KRESP,HCOMMENT,HDIR)
+!     #############################################################
+!
+!!****  * - routine to fill a write 2D array for the externalised surface 
+!
+!
+!
+!
+USE MODD_SURFEX_MPI, ONLY : NRANK, NPIO, XTIME_NPIO_WRITE
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, NMASK, NFULL, &
+                            CPREFIX2D, LFANOCOMPACT
+USE MODD_SURF_PAR,   ONLY : XUNDEF, LEN_HREC
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+USE MODI_GATHER_AND_WRITE_MPI
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+#ifdef SFX_MPI
+INCLUDE "mpif.h"
+#endif
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),        INTENT(IN) :: HREC     ! name of the article to be read
+INTEGER,                  INTENT(IN) :: KL1      ! number of points
+INTEGER,                  INTENT(IN) :: KL2      ! 2nd dimension
+REAL, DIMENSION(KL1,KL2), INTENT(IN) :: PFIELD   ! array containing the data field
+INTEGER,                  INTENT(OUT):: KRESP    ! KRESP  : return-code if a problem appears
+CHARACTER(LEN=100),       INTENT(IN) :: HCOMMENT ! comment string
+CHARACTER(LEN=1),         INTENT(IN) :: HDIR     ! type of field :
+                                                 ! 'H' : field with
+                                                 !       horizontal spatial dim.
+                                                 ! '-' : no horizontal dim.
+!*      0.2   Declarations of local variables
+! 
+LOGICAL :: GFOUND
+CHARACTER(LEN=4)  :: YPREFIX
+CHARACTER(LEN=3)  :: YPATCH
+INTEGER           :: I, JL ! loop counter
+INTEGER           :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+INTEGER           :: ILCHAM
+REAL  :: XTIME0
+REAL, DIMENSION(MAX(NFULL,SIZE(PFIELD,1)),SIZE(PFIELD,2)) :: ZWORK   ! work array read in the file
+REAL, DIMENSION(SIZE(PFIELD,2))       :: ZMEAN, ZCOUNT
+REAL(KIND=JPRB)   :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX2_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+CALL IO_BUFF(HREC,'W',GFOUND)
+!
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX2_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+!
+CALL GATHER_AND_WRITE_MPI(PFIELD,ZWORK,NMASK)
+!
+IF (NRANK==NPIO) THEN
+  !
+#ifdef SFX_MPI
+  XTIME0 = MPI_WTIME()
+#endif
+  !    
+  IF (.NOT. LFAGMAP) THEN
+    IF(LFANOCOMPACT)THEN
+      CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+        ! -- Pour ecrire sans compactage
+      CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+      DO JL=1,SIZE(ZWORK,2)
+        WRITE(YPATCH,'(I3.3)')JL
+        YPREFIX=CPREFIX2D//YPATCH//'_'
+        CALL FAIENC(KRESP,NUNIT_FA,YPREFIX,0,HREC,ZWORK(:,JL),.FALSE.)
+        IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+      END DO
+      ! On remet la valeur par defaut 
+      CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ELSE
+      ZMEAN (:)=0.0
+      ZCOUNT(:)=0.0
+      DO I=1,NFULL
+        DO JL=1,SIZE(ZWORK,2)
+          IF(ZWORK(I,JL)/=XUNDEF) THEN
+            ZMEAN (JL)=ZMEAN(JL)+ZWORK(I,JL)
+            ZCOUNT(JL)=ZCOUNT(JL)+1.0
+          ENDIF
+        ENDDO
+      ENDDO
+      WHERE(ZCOUNT(:)>0.0)ZMEAN(:)=ZMEAN(:)/ZCOUNT(:)        
+      DO JL=1,SIZE(ZWORK,2)
+        WHERE(ZWORK(:,JL)==XUNDEF)ZWORK(:,JL)=ZMEAN(JL)
+        WRITE(YPATCH,'(I3.3)')JL
+        YPREFIX=CPREFIX2D//YPATCH//'_'
+        CALL FAIENC(KRESP,NUNIT_FA,YPREFIX,0,HREC,ZWORK(:,JL),.FALSE.)
+        IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+      END DO
+    ENDIF
+  ELSE
+    DO JL = 1, SIZE (ZWORK, 2)
+      CALL SETNBITS (CPREFIX2D, JL, HREC)
+      CALL FAIENC_NOEXTZ (KRESP, NUNIT_FA, CPREFIX2D, JL, HREC, ZWORK (:, JL), .FALSE., ILCHAM) 
+      IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+    ENDDO
+    CALL FAIDX_ADD (HREC, 'X2', CMASK, ILCHAM, SIZE (ZWORK, 2))
+  ENDIF
+  !
+#ifdef SFX_MPI
+  XTIME_NPIO_WRITE = XTIME_NPIO_WRITE + (MPI_WTIME() - XTIME0)
+#endif
+  !  
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX2_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFX2_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFX3_FA (HREC,KL1,KL2,KL3,PFIELD,KRESP,HCOMMENT,HDIR)
+!     #############################################################
+!
+!!****  * - routine to fill a write 2D array for the externalised surface 
+!
+!
+!
+!
+USE MODD_SURFEX_MPI, ONLY : NRANK, NPIO, XTIME_NPIO_WRITE
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, NMASK, NFULL, &
+                            CPREFIX2D, LFANOCOMPACT
+USE MODD_SURF_PAR,   ONLY : XUNDEF, LEN_HREC
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+USE MODI_GATHER_AND_WRITE_MPI
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+#ifdef SFX_MPI
+INCLUDE "mpif.h"
+#endif
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),        INTENT(IN) :: HREC     ! name of the article to be read
+INTEGER,                  INTENT(IN) :: KL1      ! number of points
+INTEGER,                  INTENT(IN) :: KL2      ! 2nd dimension
+INTEGER,                  INTENT(IN) :: KL3      ! 2nd dimension
+REAL, DIMENSION(KL1,KL2,KL3), INTENT(IN) :: PFIELD   ! array containing the data field
+INTEGER,                  INTENT(OUT):: KRESP    ! KRESP  : return-code if a problem appears
+CHARACTER(LEN=100),       INTENT(IN) :: HCOMMENT ! comment string
+CHARACTER(LEN=1),         INTENT(IN) :: HDIR     ! type of field :
+                                                 ! 'H' : field with
+                                                 !       horizontal spatial dim.
+                                                 ! '-' : no horizontal dim.
+!*      0.2   Declarations of local variables
+! 
+LOGICAL :: GFOUND
+CHARACTER(LEN=4)  :: YPREFIX
+CHARACTER(LEN=3)  :: YPATCH
+INTEGER           :: I, JL, JP ! loop counter
+INTEGER           :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+REAL  :: XTIME0
+REAL, DIMENSION(MAX(NFULL,SIZE(PFIELD,1)),SIZE(PFIELD,2),SIZE(PFIELD,3)) :: ZWORK   ! work array read in the file
+REAL, DIMENSION(SIZE(PFIELD,2),SIZE(PFIELD,3))       :: ZMEAN, ZCOUNT
+REAL(KIND=JPRB)   :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX2_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+CALL IO_BUFF(HREC,'W',GFOUND)
+!
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX2_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+!
+CALL GATHER_AND_WRITE_MPI(PFIELD,ZWORK,NMASK)
+!
+IF (NRANK==NPIO) THEN
+  !
+#ifdef SFX_MPI
+  XTIME0 = MPI_WTIME()
+#endif
+  !    
+  IF(LFANOCOMPACT)THEN
+    CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ! -- Pour ecrire sans compactage
+    CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    DO JP=1,SIZE(ZWORK,3)
+      DO JL=1,SIZE(ZWORK,2)
+        WRITE(YPATCH,'(I3.3)')JL
+        YPREFIX=CPREFIX2D//YPATCH//'_'
+        CALL FAIENC(KRESP,NUNIT_FA,YPREFIX,0,HREC,ZWORK(:,JL,JP),.FALSE.)
+        IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+      ENDDO
+    END DO
+    ! On remet la valeur par defaut 
+    CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ELSE
+    ZMEAN (:,:)=0.0
+    ZCOUNT(:,:)=0.0
+    DO I=1,NFULL
+      DO JP=1,SIZE(ZWORK,3)
+        DO JL=1,SIZE(ZWORK,2)
+          IF(ZWORK(I,JL,JP)/=XUNDEF) THEN
+            ZMEAN (JL,JP)=ZMEAN(JL,JP)+ZWORK(I,JL,JP)
+            ZCOUNT(JL,JP)=ZCOUNT(JL,JP)+1.0
+          ENDIF
+        ENDDO
+      ENDDO
+    ENDDO
+    WHERE(ZCOUNT(:,:)>0.0)ZMEAN(:,:)=ZMEAN(:,:)/ZCOUNT(:,:)
+    DO JP=1,SIZE(ZWORK,3)        
+      DO JL=1,SIZE(ZWORK,2)
+        WHERE(ZWORK(:,JL,JP)==XUNDEF)ZWORK(:,JL,JP)=ZMEAN(JL,JP)
+        WRITE(YPATCH,'(I3.3)')JL
+        YPREFIX=CPREFIX2D//YPATCH//'_'
+        CALL FAIENC(KRESP,NUNIT_FA,YPREFIX,0,HREC,ZWORK(:,JL,JP),.FALSE.)
+        IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+      ENDDO
+    END DO
+  ENDIF
+  !
+#ifdef SFX_MPI
+  XTIME_NPIO_WRITE = XTIME_NPIO_WRITE + (MPI_WTIME() - XTIME0)
+#endif
+  !  
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFX3_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFX3_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFN1_FA (&
+                                  HREC,KL,KFIELD,KRESP,HCOMMENT,HDIR)
+!     #############################################################
+!
+!!****  * - routine to write an integer array
+!
+!
+!
+!
+USE MODD_SURFEX_MPI, ONLY : NRANK, NPIO, XTIME_NPIO_WRITE
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, NMASK, NFULL, CPREFIX1D, LFANOCOMPACT
+USE MODD_SURF_PAR, ONLY : LEN_HREC
+!
+USE MODE_FASURFEX
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+USE MODI_GATHER_AND_WRITE_MPI
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+#ifdef SFX_MPI
+INCLUDE "mpif.h"
+#endif
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),      INTENT(IN) :: HREC     ! name of the article to be read
+INTEGER,                INTENT(IN) :: KL       ! number of points
+INTEGER, DIMENSION(KL), INTENT(IN) :: KFIELD   ! array containing the data field
+INTEGER,                INTENT(OUT):: KRESP    ! KRESP  : return-code if a problem appears
+CHARACTER(LEN=100),     INTENT(IN) :: HCOMMENT ! comment string
+CHARACTER(LEN=1),       INTENT(IN) :: HDIR     ! type of field :
+                                               ! 'H' : field with
+                                               !       horizontal spatial dim.
+                                               ! '-' : no horizontal dim.
+!*      0.2   Declarations of local variables
+! 
+LOGICAL :: GFOUND
+CHARACTER(LEN=18)         :: YNAME! Field Nam
+INTEGER                   :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+INTEGER, DIMENSION(MAX(NFULL,SIZE(KFIELD))) :: JWORK  ! work array read in the file
+INTEGER (KIND=8), ALLOCATABLE :: IWORK (:)
+REAL   :: XTIME0
+REAL(KIND=JPRB)           :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFN1_FA',0,ZHOOK_HANDLE)
+!
+KRESP = 0
+!
+ CALL IO_BUFF(HREC,'W',GFOUND)
+!
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFN1_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+!
+IF (HDIR/='H' .OR. HREC=="-") THEN
+  JWORK(1:KL) = KFIELD
+ELSE
+  CALL GATHER_AND_WRITE_MPI(KFIELD,JWORK,NMASK)
+ENDIF
+!
+IF (NRANK==NPIO) THEN
+  !
+#ifdef SFX_MPI
+  XTIME0 = MPI_WTIME()
+#endif
+  !    
+  IF (.NOT. LFAGMAP) THEN
+    IF(LFANOCOMPACT)THEN
+    CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+      ! -- Pour ecrire sans compactage
+    CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ENDIF
+    !
+    YNAME=TRIM(CPREFIX1D)//TRIM(HREC)
+    !
+    CALL  FAECR_I_D(KRESP,NUNIT_FA,YNAME,KL,JWORK(1:KL))
+    IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+    !
+    IF(LFANOCOMPACT)THEN
+      ! On remet la valeur par defaut 
+      CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ENDIF
+  ELSE
+    CALL FAIDX_ADD (HREC, 'N1', '', KL, -1)
+    ALLOCATE (IWORK (KL))
+    IWORK = JWORK (1:KL)
+    CALL LFIECR (KRESP, NUNIT_FA, CPREFIX1D//TRIM(HREC), IWORK, SIZE (IWORK))
+    IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+  ENDIF
+  !
+#ifdef SFX_MPI
+  XTIME_NPIO_WRITE = XTIME_NPIO_WRITE + (MPI_WTIME() - XTIME0)
+#endif
+  !  
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFN1_FA',1,ZHOOK_HANDLE)
+RETURN
+!
+END SUBROUTINE WRITE_SURFN1_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFL1_FA (&
+                                  HREC,KL,OFIELD,KRESP,HCOMMENT,HDIR)
+!     #############################################################
+!
+!!****  * - routine to write a logical array
+!
+!
+!
+!
+USE MODD_SURFEX_MPI, ONLY : NRANK, NPIO, XTIME_NPIO_WRITE
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, CPREFIX1D, LFANOCOMPACT
+USE MODD_SURF_PAR, ONLY : LEN_HREC
+!
+USE MODE_FASURFEX
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+#ifdef SFX_MPI
+INCLUDE "mpif.h"
+#endif
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),      INTENT(IN) :: HREC     ! name of the article to be read
+INTEGER,             INTENT(IN) :: KL       ! number of points
+LOGICAL, DIMENSION(KL), INTENT(IN) :: OFIELD   ! array containing the data field
+INTEGER,                INTENT(OUT):: KRESP    ! KRESP  : return-code if a problem appears
+CHARACTER(LEN=100),     INTENT(IN) :: HCOMMENT ! comment string
+CHARACTER(LEN=1),       INTENT(IN) :: HDIR     ! type of field :
+                                               ! 'H' : field with
+                                               !       horizontal spatial dim.
+                                               ! '-' : no horizontal dim.
+!*      0.2   Declarations of local variables
+!
+LOGICAL :: GFOUND
+CHARACTER(LEN=18):: YNAME ! Field Name
+INTEGER          :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+INTEGER          :: J
+INTEGER (KIND=8), ALLOCATABLE :: IWORK (:)
+REAL :: XTIME0
+REAL(KIND=JPRB)  :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFL1_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+CALL IO_BUFF(HREC,'W',GFOUND)
+!
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFL1_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+!
+IF (NRANK==NPIO) THEN
+  !
+#ifdef SFX_MPI
+  XTIME0 = MPI_WTIME()
+#endif
+  !  
+  IF (.NOT. LFAGMAP) THEN
+    IF(LFANOCOMPACT)THEN
+    CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+      ! -- Pour ecrire sans compactage
+    CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ENDIF
+    !
+    YNAME=TRIM(CPREFIX1D)//TRIM(HREC)
+    CALL  FAECR_L_D(KRESP,NUNIT_FA,YNAME,KL,OFIELD)
+    IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+    !
+    IF(LFANOCOMPACT)THEN
+      ! On remet la valeur par defaut 
+    CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ENDIF
+  ELSE
+    CALL FAIDX_ADD (HREC, 'L1', '', KL, -1)
+    ALLOCATE (IWORK (KL))
+    DO J = 1, KL
+      IF (OFIELD (J)) THEN
+        IWORK (J) = 1
+      ELSE
+        IWORK (J) = 0
+      ENDIF
+    ENDDO
+    CALL LFIECR (KRESP, NUNIT_FA, CPREFIX1D//TRIM(HREC), IWORK, SIZE (IWORK))
+    IF (KRESP/=0) CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+  ENDIF
+  !
+#ifdef SFX_MPI
+  XTIME_NPIO_WRITE = XTIME_NPIO_WRITE + (MPI_WTIME() - XTIME0)
+#endif
+  !  
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFL1_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFL1_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFT0_FA (&
+                                  HREC,KYEAR,KMONTH,KDAY,PTIME,KRESP,HCOMMENT)
+!     #############################################################
+!
+!!****  * - routine to write a date
+!
+!
+USE MODD_IO_SURF_FA, ONLY : CPREFIX1D, NUNIT_FA, LFANOCOMPACT
+USE MODD_SURF_PAR, ONLY : LEN_HREC
+!
+USE MODE_FASURFEX
+!
+USE MODI_IO_BUFF
+USE MODI_ERROR_WRITE_SURF_FA
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),  INTENT(IN)  :: HREC     ! name of the article to be read
+INTEGER,            INTENT(IN)  :: KYEAR    ! year
+INTEGER,            INTENT(IN)  :: KMONTH   ! month
+INTEGER,            INTENT(IN)  :: KDAY     ! day
+REAL,               INTENT(IN)  :: PTIME    ! time
+INTEGER,            INTENT(OUT) :: KRESP    ! KRESP  : return-code if a problem appears
+CHARACTER(LEN=100), INTENT(IN)  :: HCOMMENT ! comment string
+
+!*      0.2   Declarations of local variables
+!
+LOGICAL :: GFOUND
+CHARACTER(LEN=18)     :: YNAME ! Field Name
+INTEGER               :: IRET
+INTEGER               :: IHOUR, IMIN, ISEC
+INTEGER               :: INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL
+INTEGER, DIMENSION(3) :: ITDATE
+INTEGER (KIND=8) :: IWORK (4)
+REAL(KIND=JPRB) :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFT0_FA',0,ZHOOK_HANDLE)
+!
+KRESP=0
+!
+IF (HREC=='DTCUR') THEN
+!        
+  IHOUR = FLOOR(PTIME)/3600
+  IMIN  = FLOOR(PTIME)/60 - IHOUR * 60
+  ISEC  = NINT(PTIME) - IHOUR * 3600 - IMIN * 60
+  CALL FANDAR(IRET,NUNIT_FA,(/ KYEAR, KMONTH, KDAY, IHOUR, IMIN, 1, 0, 0, 0, 0, 0 /))
+!
+ELSE
+!
+  CALL IO_BUFF(HREC,'W',GFOUND)
+  IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFT0_FA',1,ZHOOK_HANDLE)
+  IF (GFOUND) RETURN
+!
+END IF
+
+IF (.NOT. LFAGMAP) THEN
+!
+  ITDATE(1) = KYEAR
+  ITDATE(2) = KMONTH
+  ITDATE(3) = KDAY
+!
+  IF(LFANOCOMPACT)THEN
+    CALL FAVEUR(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+    ! -- Pour ecrire sans compactage
+    CALL FAGOTE(KRESP,NUNIT_FA,-1,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+!
+  YNAME=TRIM(CPREFIX1D)//TRIM(HREC)//'%TDATE'
+  CALL  FAECR_I_D(KRESP,NUNIT_FA,YNAME,3,ITDATE)
+  IF (KRESP/=0) THEN
+    CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+  ENDIF
+!
+  YNAME=TRIM(CPREFIX1D)//TRIM(HREC)//'%TIME'
+  CALL  FAECR_R(KRESP,NUNIT_FA,YNAME,PTIME)
+  IF (KRESP/=0) THEN
+    CALL ERROR_WRITE_SURF_FA(HREC,KRESP)
+  ENDIF
+!
+  IF(LFANOCOMPACT)THEN
+    ! On remet la valeur par defaut 
+    CALL FAGOTE(KRESP,NUNIT_FA,INGRIB,INBPDG,INBCSP,ISTRON,IPUILA,IDMOPL)
+  ENDIF
+ELSE
+  CALL FAIDX_ADD (HREC, 'T0', '', -1, -1)
+  IWORK (1) = KYEAR
+  IWORK (2) = KMONTH
+  IWORK (3) = KDAY
+  IWORK (4) = TRANSFER (PTIME, IWORK (4))
+  CALL LFIECR (KRESP, NUNIT_FA, TRIM(CPREFIX1D)//HREC, IWORK, SIZE (IWORK))
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFT0_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFT0_FA
+!
+!     #############################################################
+      SUBROUTINE WRITE_SURFT2_FA (&
+                                  HREC,KL1,KL2,KYEAR,KMONTH,KDAY,PTIME,KRESP,HCOMMENT)
+!     #############################################################
+!
+!!****  * - routine to write a date
+!
+!
+!
+!
+USE MODD_SURFEX_MPI, ONLY : NRANK, NPIO, XTIME_NPIO_WRITE
+!
+USE MODD_IO_SURF_FA, ONLY : NUNIT_FA, CPREFIX1D, NLUOUT
+USE MODD_SURF_PAR, ONLY : LEN_HREC
+!
+USE MODE_FASURFEX
+!
+USE MODI_IO_BUFF
+USE MODI_ABOR1_SFX
+USE MODI_ERROR_WRITE_SURF_FA
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+!
+#ifdef SFX_MPI
+INCLUDE "mpif.h"
+#endif
+!
+!*      0.1   Declarations of arguments
+!
+!
+!
+ CHARACTER(LEN=LEN_HREC),  INTENT(IN)  :: HREC     ! name of the article to be read
+INTEGER,                      INTENT(IN) :: KL1      ! number of points
+INTEGER,                      INTENT(IN) :: KL2      ! 2nd dimension
+INTEGER, DIMENSION(KL1,KL2), INTENT(IN)  :: KYEAR    ! year
+INTEGER, DIMENSION(KL1,KL2), INTENT(IN)  :: KMONTH   ! month
+INTEGER, DIMENSION(KL1,KL2), INTENT(IN)  :: KDAY     ! day
+REAL,    DIMENSION(KL1,KL2), INTENT(IN)  :: PTIME    ! time
+INTEGER,            INTENT(OUT) :: KRESP    ! KRESP  : return-code if a problem appears
+CHARACTER(LEN=100), INTENT(IN)  :: HCOMMENT ! comment string
+
+!*      0.2   Declarations of local variables
+!
+LOGICAL :: GFOUND
+ CHARACTER(LEN=18):: YNAME ! Field Name
+INTEGER, DIMENSION(3,SIZE(KYEAR,1),SIZE(KYEAR,2)) :: ITDATE
+REAL :: XTIME0
+REAL(KIND=JPRB) :: ZHOOK_HANDLE
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFT2_FA',0,ZHOOK_HANDLE)
+!
+KRESP = 0
+!
+CALL IO_BUFF(HREC,'W',GFOUND)
+!
+IF (GFOUND .AND. LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFT2_FA',1,ZHOOK_HANDLE)
+IF (GFOUND) RETURN
+!
+IF (NRANK==NPIO) THEN
+  !
+#ifdef SFX_MPI
+  XTIME0 = MPI_WTIME()
+#endif
+  !  
+  ITDATE(1,:,:) = KYEAR  (:,:)
+  ITDATE(2,:,:) = KMONTH (:,:)
+  ITDATE(3,:,:) = KDAY   (:,:)
+  !
+  YNAME=TRIM(CPREFIX1D)//TRIM(HREC)
+  WRITE(NLUOUT,*) ' WRITE_SURFT2_FA : time in 2 dimensions not yet implemented : YNAME=',YNAME,'ITDATE=',ITDATE
+  CALL ABOR1_SFX('MODE_WRITE_SURF_FA:WRITE_SURFT2_FA: time in 2 dimensions not yet implemented')
+  !
+#ifdef SFX_MPI
+  XTIME_NPIO_WRITE = XTIME_NPIO_WRITE + (MPI_WTIME() - XTIME0)
+#endif
+  !  
+ENDIF
+!
+IF (LHOOK) CALL DR_HOOK('MODE_WRITE_SURF_FA:WRITE_SURFT2_FA',1,ZHOOK_HANDLE)
+!
+END SUBROUTINE WRITE_SURFT2_FA
+!
+END MODULE MODE_WRITE_SURF_FA
+

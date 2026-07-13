@@ -1,0 +1,342 @@
+!SFX_LIC Copyright 1994-2014 CNRS, Meteo-France and Universite Paul Sabatier
+!SFX_LIC This is part of the SURFEX software governed by the CeCILL-C licence
+!SFX_LIC version 1. See LICENSE, CeCILL-C_V1-en.txt and CeCILL-C_V1-fr.txt  
+!SFX_LIC for details. version 1.
+!     ################
+      MODULE MODD_DATA_TEB_n
+!     ################
+!
+!!****  *MODD_DATA_TEB_n - declaration of surface parameters for urban surface
+!!
+!!    PURPOSE
+!!    -------
+!     Declaration of surface parameters
+!
+!!
+!!**  IMPLICIT ARGUMENTS
+!!    ------------------
+!!      None 
+!!
+!!    REFERENCE
+!!    ---------
+!!
+!!    AUTHOR
+!!    ------
+!!      V. Masson   *Meteo France*
+!!
+!!    MODIFICATIONS
+!!    -------------
+!!      Original       01/2004
+!!      Modified       08/2012 G. Pigeon ROUGH_WALL, ROUGH_ROOF
+!!      M. Goret       02/2017 add SFCO2_RD and NB_POP
+!!      M. Goret       04/2017 add TIME_OF_CHANGE
+!!      M. Goret       04/2017 suppress EFF_HEAT
+!
+!*       0.   DECLARATIONS
+!             ------------
+!
+USE MODD_TYPE_DATE_SURF
+!
+USE YOMHOOK   ,ONLY : LHOOK,   DR_HOOK
+USE PARKIND1  ,ONLY : JPRB
+!
+IMPLICIT NONE
+
+TYPE DATA_TEB_t
+!
+  LOGICAL :: LDATA_BLDTYPE 
+  LOGICAL :: LDATA_IND_BLD_AGE
+  LOGICAL :: LDATA_COL_BLD_AGE
+  LOGICAL :: LDATA_USETYPE 
+  LOGICAL :: LDATA_P1TERRITORY
+  LOGICAL :: LDATA_PXTERRITORY
+  LOGICAL :: LDATA_FRACIHS
+  LOGICAL :: LDATA_FRACCHS
+  LOGICAL :: LDATA_FRACCOM
+  LOGICAL :: LDATA_FRACTER
+  LOGICAL :: LDATA_FRACIND
+  LOGICAL :: LDATA_FRACNHE  
+  LOGICAL :: LDATA_FRACPAV
+  LOGICAL :: LDATA_FRACMRI
+  LOGICAL :: LDATA_FRACHRI
+  LOGICAL :: LDATA_FRACATB
+  LOGICAL :: LDATA_FOEQI_MAIS
+  LOGICAL :: LDATA_FOEQI_APPT
+  LOGICAL :: LDATA_FAEQI_MAIS
+  LOGICAL :: LDATA_FAEQI_APPT 
+  LOGICAL :: LDATA_CRE_MAIS
+  LOGICAL :: LDATA_CRE_APPT
+  LOGICAL :: LDATA_GARDEN
+  LOGICAL :: LDATA_GREENROOF
+  LOGICAL :: LDATA_ROAD_DIR
+  LOGICAL :: LDATA_BLD
+  LOGICAL :: LDATA_BLD_HEIGHT
+  LOGICAL :: LDATA_WALL_O_HOR
+  LOGICAL :: LDATA_Z0_TOWN
+  LOGICAL :: LDATA_ALB_ROOF
+  LOGICAL :: LDATA_EMIS_ROOF
+  LOGICAL :: LDATA_HC_ROOF
+  LOGICAL :: LDATA_TC_ROOF
+  LOGICAL :: LDATA_D_ROOF
+  LOGICAL :: LDATA_ALB_ROAD
+  LOGICAL :: LDATA_EMIS_ROAD
+  LOGICAL :: LDATA_HC_COATING_ROAD
+  LOGICAL :: LDATA_TC_COATING_ROAD
+  LOGICAL :: LDATA_D_COATING_ROAD
+  LOGICAL :: LDATA_HC_BASEMENT_ROAD
+  LOGICAL :: LDATA_TC_BASEMENT_ROAD
+  LOGICAL :: LDATA_ALB_WALL
+  LOGICAL :: LDATA_EMIS_WALL
+  LOGICAL :: LDATA_HC_WALL
+  LOGICAL :: LDATA_TC_WALL
+  LOGICAL :: LDATA_D_WALL
+  LOGICAL :: LDATA_H_TRAFFIC
+  LOGICAL :: LDATA_LE_TRAFFIC
+  LOGICAL :: LDATA_LE_INDUSTRY
+  LOGICAL :: LDATA_H_INDUSTRY
+  LOGICAL :: LDATA_ROUGH_ROOF
+  LOGICAL :: LDATA_ROUGH_WALL
+  LOGICAL :: LDATA_EMIS_PANEL
+  LOGICAL :: LDATA_ALB_PANEL
+  LOGICAL :: LDATA_EFF_PANEL
+  LOGICAL :: LDATA_FRAC_PANEL
+  LOGICAL :: LDATA_NB_POP           ! Number of people per square kilometer
+  LOGICAL :: LDATA_SFCO2_RD         ! CO2 flux link to traffic (roads) (kg/m2 of town/s)
+  LOGICAL :: LDATA_DELTA_LEGAL_TIME ! difference between UTC and legal time (in hour)
+  LOGICAL :: LDATA_TIME_OF_CHANGE   ! time of time change of the legal hour
+!
+! Number of layers in the specification of thermal characteristics
+!
+  INTEGER                    :: NPAR_ROOF_LAYER   ! number of layers in roofs
+  INTEGER                    :: NPAR_WALL_LAYER   ! number of layers in walls
+!
+!
+! Geometric Parameters:
+!
+  INTEGER, POINTER, DIMENSION(:):: NPAR_BLDTYPE      ! type of buidlings
+  INTEGER, POINTER, DIMENSION(:):: NPAR_IND_BLD_AGE  ! date of construction of individual housing buildings
+  INTEGER, POINTER, DIMENSION(:):: NPAR_COL_BLD_AGE  ! date of construction of collective housing buildings
+  INTEGER, POINTER, DIMENSION(:):: NPAR_BLDCODE      ! code for buildings (type+age)
+  INTEGER, POINTER, DIMENSION(:):: NPAR_USETYPE      ! type of use in the buildings
+  INTEGER, POINTER, DIMENSION(:):: NPAR_P1TERRITORY  ! Historical building material territory
+  INTEGER, POINTER, DIMENSION(:):: NPAR_PXTERRITORY  ! Recent building material territory
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACIHS      ! Individual housing fraction
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACCHS      ! Collective housing fraction 
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACCOM      ! Commercial fraction
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACTER      ! Tertiairy fraction 
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACIND      ! Industrial fraction
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACNHE      ! Non or poorly heated uses  
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACPAV      ! Pavillionary building fraction 
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACMRI      ! Mid-rise building fraction
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACHRI      ! High-rise building fraction 
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRACATB      ! Activity building fraction 
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FOEQI_MAIS  ! Fraction of strong equipment and use in individual housing
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FOEQI_APPT  ! Fraction of strong equipment and use in collective housing
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FAEQI_MAIS  ! Fraction of weak equipment and use in individual housing
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FAEQI_APPT  ! Fraction of weak equipment and use in collective housing
+  REAL, POINTER, DIMENSION(:)   :: XPAR_CRE_MAIS     ! Fraction of high regulation in individual housing 
+  REAL, POINTER, DIMENSION(:)   :: XPAR_CRE_APPT     ! Fraction of high regulation in collective housing
+  REAL, POINTER, DIMENSION(:)   :: XPAR_GARDEN       ! fraction of veg in the streets   (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_GREENROOF    ! fraction of greenroofs on roofs  (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRAC_HVEG    ! fraction of high vegetation  (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRAC_LVEG    ! fraction of low  vegetation  (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRAC_NVEG    ! fraction of no   vegetation  (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_ROAD_DIR     ! road direction (deg from North, clockwise)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_BLD          ! fraction of buildings            (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_ROAD         ! fraction of roads                (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_BLD_HEIGHT   ! buildings height 'h'             (m)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_WALL_O_HOR   ! wall surf. / hor. surf.          (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_Z0_TOWN      ! roughness length for momentum    (m)
+!
+! Roof parameters
+!
+  REAL, POINTER, DIMENSION(:)   :: XPAR_ALB_ROOF     ! roof albedo                      (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_EMIS_ROOF    ! roof emissivity                  (-)
+  REAL, POINTER, DIMENSION(:,:) :: XPAR_HC_ROOF      ! roof layers heat capacity        (J/K/m3)
+  REAL, POINTER, DIMENSION(:,:) :: XPAR_TC_ROOF      ! roof layers thermal conductivity (W/K/m)
+  REAL, POINTER, DIMENSION(:,:) :: XPAR_D_ROOF       ! depth of roof layers             (m)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_ROUGH_ROOF   ! outside roof roughness coef 
+!
+!
+! Road parameters
+!
+  REAL, POINTER, DIMENSION(:)   :: XPAR_ALB_ROAD     ! road albedo                      (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_EMIS_ROAD    ! road emissivity                  (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_HC_COATING_ROAD  ! road coating heat capacity        (J/K/m3)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_TC_COATING_ROAD  ! road coating thermal conductivity (W/K/m)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_D_COATING_ROAD   ! depth of road coating            (m)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_HC_BASEMENT_ROAD ! road basement heat capacity        (J/K/m3)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_TC_BASEMENT_ROAD ! road basement thermal conductivity (W/K/m)
+!
+! Wall parameters
+!
+  REAL, POINTER, DIMENSION(:)   :: XPAR_ALB_WALL     ! wall albedo                      (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_EMIS_WALL    ! wall emissivity                  (-)
+  REAL, POINTER, DIMENSION(:,:) :: XPAR_HC_WALL      ! wall layers heat capacity        (J/K/m3)
+  REAL, POINTER, DIMENSION(:,:) :: XPAR_TC_WALL      ! wall layers thermal conductivity (W/K/m)
+  REAL, POINTER, DIMENSION(:,:) :: XPAR_D_WALL       ! depth of wall layers             (m)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_ROUGH_WALL   ! outside wall roughness coef
+!
+! anthropogenic fluxes
+!
+  REAL, POINTER, DIMENSION(:)   :: XPAR_H_TRAFFIC    ! anthropogenic sensible
+!                                                  ! heat fluxes due to traffic       (W/m2)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_LE_TRAFFIC   ! anthropogenic latent
+!                                                  ! heat fluxes due to traffic       (W/m2)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_H_INDUSTRY   ! anthropogenic sensible                   
+!                                                  ! heat fluxes due to factories     (W/m2)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_LE_INDUSTRY  ! anthropogenic latent
+!                                                  ! heat fluxes due to factories     (W/m2)
+! solar panels
+!
+  REAL, POINTER, DIMENSION(:)   :: XPAR_EMIS_PANEL   ! emissivity of solar panel      (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_ALB_PANEL    ! albedo     of solar panel      (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_EFF_PANEL    ! efficiency of solar panel      (-)
+  REAL, POINTER, DIMENSION(:)   :: XPAR_FRAC_PANEL   ! fraction   of solar panel      (-)
+!
+  REAL, POINTER, DIMENSION(:) :: XPAR_NB_POP           ! Number of people per square kilometer
+  REAL, POINTER, DIMENSION(:) :: XPAR_SFCO2_RD         ! CO2 flux link to traffic (roads) (kg/m2 of town/s)
+  REAL, POINTER, DIMENSION(:,:) :: XPAR_DELTA_LEGAL_TIME ! difference between UTC and legal time (in hour)
+!
+  TYPE(DATE_TIME), POINTER, DIMENSION(:) :: XPAR_TIME_OF_CHANGE   ! time of time change of the legal hour
+!
+END TYPE DATA_TEB_t
+!
+CONTAINS
+!
+SUBROUTINE DATA_TEB_INIT(YDATA_TEB)
+TYPE(DATA_TEB_t), INTENT(INOUT) :: YDATA_TEB
+REAL(KIND=JPRB) :: ZHOOK_HANDLE
+IF (LHOOK) CALL DR_HOOK("MODD_DATA_TEB_N:DATA_TEB_INIT",0,ZHOOK_HANDLE)
+  NULLIFY(YDATA_TEB%NPAR_BLDTYPE)
+  NULLIFY(YDATA_TEB%NPAR_IND_BLD_AGE)
+  NULLIFY(YDATA_TEB%NPAR_COL_BLD_AGE)
+  NULLIFY(YDATA_TEB%NPAR_BLDCODE)
+  NULLIFY(YDATA_TEB%NPAR_USETYPE)
+  NULLIFY(YDATA_TEB%NPAR_P1TERRITORY)
+  NULLIFY(YDATA_TEB%NPAR_PXTERRITORY)
+  NULLIFY(YDATA_TEB%XPAR_FRACIHS)
+  NULLIFY(YDATA_TEB%XPAR_FRACCHS)
+  NULLIFY(YDATA_TEB%XPAR_FRACCOM)
+  NULLIFY(YDATA_TEB%XPAR_FRACTER)
+  NULLIFY(YDATA_TEB%XPAR_FRACIND)
+  NULLIFY(YDATA_TEB%XPAR_FRACNHE) 
+  NULLIFY(YDATA_TEB%XPAR_FRACPAV)
+  NULLIFY(YDATA_TEB%XPAR_FRACMRI)
+  NULLIFY(YDATA_TEB%XPAR_FRACHRI)
+  NULLIFY(YDATA_TEB%XPAR_FRACATB)
+  NULLIFY(YDATA_TEB%XPAR_FOEQI_MAIS)
+  NULLIFY(YDATA_TEB%XPAR_FOEQI_APPT)
+  NULLIFY(YDATA_TEB%XPAR_FAEQI_MAIS)
+  NULLIFY(YDATA_TEB%XPAR_FAEQI_APPT)
+  NULLIFY(YDATA_TEB%XPAR_CRE_MAIS)
+  NULLIFY(YDATA_TEB%XPAR_CRE_APPT)
+  NULLIFY(YDATA_TEB%XPAR_GARDEN)
+  NULLIFY(YDATA_TEB%XPAR_GREENROOF)
+  NULLIFY(YDATA_TEB%XPAR_FRAC_HVEG)
+  NULLIFY(YDATA_TEB%XPAR_FRAC_LVEG)
+  NULLIFY(YDATA_TEB%XPAR_FRAC_NVEG)
+  NULLIFY(YDATA_TEB%XPAR_ROAD_DIR)
+  NULLIFY(YDATA_TEB%XPAR_BLD)
+  NULLIFY(YDATA_TEB%XPAR_ROAD)
+  NULLIFY(YDATA_TEB%XPAR_BLD_HEIGHT)
+  NULLIFY(YDATA_TEB%XPAR_WALL_O_HOR)
+  NULLIFY(YDATA_TEB%XPAR_Z0_TOWN)
+  NULLIFY(YDATA_TEB%XPAR_ALB_ROOF)
+  NULLIFY(YDATA_TEB%XPAR_EMIS_ROOF)
+  NULLIFY(YDATA_TEB%XPAR_HC_ROOF)
+  NULLIFY(YDATA_TEB%XPAR_TC_ROOF)
+  NULLIFY(YDATA_TEB%XPAR_D_ROOF)
+  NULLIFY(YDATA_TEB%XPAR_ALB_ROAD)
+  NULLIFY(YDATA_TEB%XPAR_EMIS_ROAD)
+  NULLIFY(YDATA_TEB%XPAR_HC_COATING_ROAD)
+  NULLIFY(YDATA_TEB%XPAR_TC_COATING_ROAD)
+  NULLIFY(YDATA_TEB%XPAR_D_COATING_ROAD)
+  NULLIFY(YDATA_TEB%XPAR_HC_BASEMENT_ROAD)
+  NULLIFY(YDATA_TEB%XPAR_TC_BASEMENT_ROAD)
+  NULLIFY(YDATA_TEB%XPAR_ALB_WALL)
+  NULLIFY(YDATA_TEB%XPAR_EMIS_WALL)
+  NULLIFY(YDATA_TEB%XPAR_HC_WALL)
+  NULLIFY(YDATA_TEB%XPAR_TC_WALL)
+  NULLIFY(YDATA_TEB%XPAR_D_WALL)
+  NULLIFY(YDATA_TEB%XPAR_H_TRAFFIC)
+  NULLIFY(YDATA_TEB%XPAR_LE_TRAFFIC)
+  NULLIFY(YDATA_TEB%XPAR_H_INDUSTRY)
+  NULLIFY(YDATA_TEB%XPAR_LE_INDUSTRY)
+  NULLIFY(YDATA_TEB%XPAR_ROUGH_ROOF)
+  NULLIFY(YDATA_TEB%XPAR_ROUGH_WALL)
+  NULLIFY(YDATA_TEB%XPAR_EMIS_PANEL)
+  NULLIFY(YDATA_TEB%XPAR_ALB_PANEL)
+  NULLIFY(YDATA_TEB%XPAR_EFF_PANEL)
+  NULLIFY(YDATA_TEB%XPAR_EMIS_PANEL)
+  NULLIFY(YDATA_TEB%XPAR_NB_POP)
+  NULLIFY(YDATA_TEB%XPAR_SFCO2_RD)
+  NULLIFY(YDATA_TEB%XPAR_DELTA_LEGAL_TIME)
+  NULLIFY(YDATA_TEB%XPAR_TIME_OF_CHANGE)
+YDATA_TEB%LDATA_BLDTYPE=.FALSE.
+YDATA_TEB%LDATA_IND_BLD_AGE=.FALSE.
+YDATA_TEB%LDATA_COL_BLD_AGE=.FALSE.
+YDATA_TEB%LDATA_USETYPE=.FALSE.
+YDATA_TEB%LDATA_P1TERRITORY=.FALSE.
+YDATA_TEB%LDATA_PXTERRITORY=.FALSE.
+YDATA_TEB%LDATA_FRACIHS=.FALSE.
+YDATA_TEB%LDATA_FRACCHS=.FALSE.
+YDATA_TEB%LDATA_FRACCOM=.FALSE.
+YDATA_TEB%LDATA_FRACTER=.FALSE.
+YDATA_TEB%LDATA_FRACIND=.FALSE.
+YDATA_TEB%LDATA_FRACNHE=.FALSE.
+YDATA_TEB%LDATA_FRACPAV=.FALSE.
+YDATA_TEB%LDATA_FRACMRI=.FALSE.
+YDATA_TEB%LDATA_FRACHRI=.FALSE.
+YDATA_TEB%LDATA_FRACATB=.FALSE.
+YDATA_TEB%LDATA_FOEQI_MAIS=.FALSE.
+YDATA_TEB%LDATA_FOEQI_APPT=.FALSE.
+YDATA_TEB%LDATA_FAEQI_MAIS=.FALSE.
+YDATA_TEB%LDATA_FAEQI_APPT=.FALSE.
+YDATA_TEB%LDATA_CRE_MAIS=.FALSE.
+YDATA_TEB%LDATA_CRE_APPT=.FALSE.
+YDATA_TEB%LDATA_GARDEN=.FALSE.
+YDATA_TEB%LDATA_GREENROOF=.FALSE.
+YDATA_TEB%LDATA_ROAD_DIR=.FALSE.
+YDATA_TEB%LDATA_BLD=.FALSE.
+YDATA_TEB%LDATA_BLD_HEIGHT=.FALSE.
+YDATA_TEB%LDATA_WALL_O_HOR=.FALSE.
+YDATA_TEB%LDATA_Z0_TOWN=.FALSE.
+YDATA_TEB%LDATA_ALB_ROOF=.FALSE.
+YDATA_TEB%LDATA_EMIS_ROOF=.FALSE.
+YDATA_TEB%LDATA_HC_ROOF=.FALSE.
+YDATA_TEB%LDATA_TC_ROOF=.FALSE.
+YDATA_TEB%LDATA_D_ROOF=.FALSE.
+YDATA_TEB%LDATA_ALB_ROAD=.FALSE.
+YDATA_TEB%LDATA_EMIS_ROAD=.FALSE.
+YDATA_TEB%LDATA_HC_COATING_ROAD=.FALSE.
+YDATA_TEB%LDATA_TC_COATING_ROAD=.FALSE.
+YDATA_TEB%LDATA_D_COATING_ROAD=.FALSE.
+YDATA_TEB%LDATA_HC_BASEMENT_ROAD=.FALSE.
+YDATA_TEB%LDATA_TC_BASEMENT_ROAD=.FALSE.
+YDATA_TEB%LDATA_ALB_WALL=.FALSE.
+YDATA_TEB%LDATA_EMIS_WALL=.FALSE.
+YDATA_TEB%LDATA_HC_WALL=.FALSE.
+YDATA_TEB%LDATA_TC_WALL=.FALSE.
+YDATA_TEB%LDATA_D_WALL=.FALSE.
+YDATA_TEB%LDATA_H_TRAFFIC=.FALSE.
+YDATA_TEB%LDATA_LE_TRAFFIC=.FALSE.
+YDATA_TEB%LDATA_H_INDUSTRY=.FALSE.
+YDATA_TEB%LDATA_LE_INDUSTRY=.FALSE.
+YDATA_TEB%LDATA_ROUGH_ROOF=.FALSE.
+YDATA_TEB%LDATA_ROUGH_WALL=.FALSE.
+YDATA_TEB%LDATA_EMIS_PANEL=.FALSE.
+YDATA_TEB%LDATA_ALB_PANEL=.FALSE.
+YDATA_TEB%LDATA_EFF_PANEL=.FALSE.
+YDATA_TEB%LDATA_FRAC_PANEL=.FALSE.
+YDATA_TEB%LDATA_NB_POP           = .FALSE.
+YDATA_TEB%LDATA_SFCO2_RD         = .FALSE.
+YDATA_TEB%LDATA_DELTA_LEGAL_TIME = .FALSE.
+YDATA_TEB%LDATA_TIME_OF_CHANGE   = .FALSE.
+YDATA_TEB%NPAR_ROOF_LAYER=0
+YDATA_TEB%NPAR_WALL_LAYER=0
+IF (LHOOK) CALL DR_HOOK("MODD_DATA_TEB_N:DATA_TEB_INIT",1,ZHOOK_HANDLE)
+END SUBROUTINE DATA_TEB_INIT
+
+
+END MODULE MODD_DATA_TEB_n

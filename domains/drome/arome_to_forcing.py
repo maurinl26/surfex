@@ -18,9 +18,12 @@ Mapping AROME → forcing SURFEX (validé par inventaire) :
 Forcing SURFEX (FORCING.nc) — dims (Number_of_points, time) + variables ci-dessus
 + métadonnées par point : LAT, LON, ZS, ZREF(=2), UREF(=10), FRC_TIME_STP.
 
-⚠️  SCAFFOLD : le fetch + l'inventaire sont opérationnels ; l'assemblage du
-FORCING.nc (conversions unités + accumulés→flux + split SW + phase précip) et le
-run PREP/OFFLINE sont la prochaine étape (voir write_forcing / TODO).
+État : build_forcing() OPÉRATIONNEL — fetch AROME public + interpolation sur la
+grille PGD 1 km + FORCING.nc valide (testé : 6 pas × 20160 pts, valeurs plausibles).
+Limites 1er run : SWdown≈ssr (net, proxy) ; précip=0 (nuits de gel sèches) — à
+raffiner (params MF `ssrd`/`tirf`). Le run OFFLINE dépend d'un PREP file-less :
+la distribution veut un first-guess GRIB pour l'état sol primaire (WG/TG) → soit
+construire eccodes (support GRIB), soit fournir un first-guess NetCDF.
 """
 
 from __future__ import annotations
@@ -90,17 +93,135 @@ def open_package(grib_path: Path, package: str):
     return ds.rename(PKG_VARS[package])
 
 
-# TODO — assemblage FORCING.nc :
-#   * concaténer les LEAD_RANGES (0..24h+), aligner le temps
-#   * accumulés (ssrd/strd/tp) → flux instantanés (diff / Δt)
-#   * split DIR_SWdown / SCA_SWdown (ex. modèle Erbs sur SWdown)
-#   * phase précip Rainf/Snowf selon Tair (seuil ~273.15 K)
-#   * aplatir (lat,lon)→Number_of_points ; LAT/LON/ZS(depuis DEM)/ZREF=2/UREF=10
-#   * FRC_TIME_STP = 3600 s
-#   → écrire FORCING.nc (format SURFEX OFFLINE), puis PREP (init uniforme) + OFFLINE.
+def _open_sp3(grib_path):
+    """SP3 : flux radiatifs accumulés. AROME (GRIB MF) expose strd (thermique
+    descendant) et ssr (solaire NET) ; pas de ssrd/tp propres via cfgrib.
+    On prend LWdown=strd et SWdown≈ssr (net, proxy — nul la nuit, cas gel).
+    Précip traitée à part (= 0 pour le 1er run, nuits de gel sèches)."""
+    import xarray as xr
+    ds = xr.open_dataset(grib_path, engine="cfgrib", backend_kwargs={
+        "indexpath": "", "filter_by_keys": {"stepType": "accum"}})
+    keep = [v for v in ("strd", "ssr") if v in ds.data_vars]
+    return ds[keep].rename({"strd": "LWdown", "ssr": "SWdown"})
+
+
+def build_forcing(run, workdir, pgd_path, lead_ranges=("00H06H",), keep_grib=False):
+    """Télécharge AROME + interpole sur la grille PGD + assemble FORCING.nc.
+
+    Le forcing SURFEX OFFLINE doit être sur les MÊMES points que le modèle (PGD).
+    On interpole donc AROME 0,025° → grille PGD 1 km (LAT/LON/ZS depuis PGD.nc).
+    """
+    import numpy as np
+    import xarray as xr
+    from netCDF4 import Dataset
+    from scipy.interpolate import griddata
+
+    wd = Path(workdir)
+    wd.mkdir(parents=True, exist_ok=True)
+    subs = []
+    for lr in lead_ranges:
+        parts = {}
+        for pk in ("SP1", "SP2", "SP3"):
+            g = download(run, pk, lr, wd / f"arome_{pk}_{lr}.grib2")
+            parts[pk] = _open_sp3(g) if pk == "SP3" else open_package(g, pk)
+        m = xr.merge(parts.values(), compat="override", join="inner")
+        subs.append(m)
+    ds = xr.concat(subs, dim="step").sortby("step")
+
+    vt = np.asarray(ds["valid_time"].values).astype("datetime64[s]")
+    nt = vt.size
+    dt = 3600.0  # AROME horaire
+
+    # points source (AROME) et cible (grille PGD)
+    alat = np.asarray(ds["latitude"].values, "f8")
+    alon = np.asarray(ds["longitude"].values, "f8")
+    aLON, aLAT = np.meshgrid(alon, alat)
+    src = np.column_stack([aLON.ravel(), aLAT.ravel()])
+    with Dataset(str(pgd_path)) as pgd:
+        gLAT = np.asarray(pgd.variables["LAT"][:], "f8")   # (yy, xx)
+        gLON = np.asarray(pgd.variables["LON"][:], "f8")
+        gZS = np.asarray(pgd.variables["ZS"][:], "f8")
+    tgt = np.column_stack([gLON.ravel(), gLAT.ravel()])
+    npF = tgt.shape[0]
+
+    def flat(v):  # (time, ny, nx) AROME → (time, npF) interpolé sur PGD
+        a = np.asarray(ds[v].values, "f4")
+        out = np.empty((nt, npF), "f4")
+        for it in range(nt):
+            g = griddata(src, a[it].ravel(), tgt, method="linear")
+            h = ~np.isfinite(g)
+            if h.any():
+                g[h] = griddata(src, a[it].ravel(), tgt, method="nearest")[h]
+            out[it] = g
+        return out
+
+    Tair = flat("Tair")
+    Qair = flat("Qair")
+    Wind = flat("Wind")
+    WDIR = flat("Wind_DIR")
+    PSurf = flat("PSurf")
+
+    # accumulés (depuis le début du run) → flux instantané (dérivée / dt)
+    def deaccum(v):
+        a = flat(v)
+        out = np.empty_like(a)
+        out[0] = a[0] / dt
+        out[1:] = np.maximum(a[1:] - a[:-1], 0.0) / dt
+        return out
+
+    SW = np.maximum(deaccum("SWdown"), 0.0)       # W/m² (net solaire, proxy)
+    LW = deaccum("LWdown")                         # W/m² (thermique descendant)
+    PR = np.zeros_like(Tair)                       # précip=0 (1er run ; TODO tirf)
+    DIR_SW = 0.7 * SW                              # split simple direct/diffus
+    SCA_SW = 0.3 * SW
+    Rainf = np.where(Tair >= 273.15, PR, 0.0)      # phase par Tair
+    Snowf = np.where(Tair < 273.15, PR, 0.0)
+
+    # métadonnées par point = grille PGD (LAT/LON/ZS réels, orographie IGN)
+    ZS = gZS.ravel().astype("f4")
+
+    fpath = wd / "FORCING.nc"
+    with Dataset(fpath, "w", format="NETCDF3_64BIT_OFFSET") as nc:
+        nc.createDimension("Number_of_points", npF)
+        nc.createDimension("time", nt)
+        t0 = vt[0].astype("datetime64[s]").item()
+
+        def var(name, dims, data, **att):
+            v = nc.createVariable(name, "f4" if data.dtype == np.float32 else "f8", dims)
+            for k, val in att.items():
+                setattr(v, k, val)
+            v[:] = data
+            return v
+
+        tv = nc.createVariable("time", "f8", ("time",))
+        tv.units = f"seconds since {t0.strftime('%Y-%m-%d %H:%M:%S')}"
+        tv[:] = ((vt - vt[0]) / np.timedelta64(1, "s")).astype("f8")
+        nc.createVariable("FRC_TIME_STP", "f8")[...] = dt
+
+        var("LON", ("Number_of_points",), gLON.ravel().astype("f4"))
+        var("LAT", ("Number_of_points",), gLAT.ravel().astype("f4"))
+        var("ZS", ("Number_of_points",), ZS)
+        var("ZREF", ("Number_of_points",), np.full(npF, 2.0, "f4"))
+        var("UREF", ("Number_of_points",), np.full(npF, 10.0, "f4"))
+        for nm, arr in (("Tair", Tair), ("Qair", Qair), ("Wind", Wind),
+                        ("Wind_DIR", WDIR), ("PSurf", PSurf), ("LWdown", LW),
+                        ("DIR_SWdown", DIR_SW), ("SCA_SWdown", SCA_SW),
+                        ("Rainf", Rainf), ("Snowf", Snowf)):
+            var(nm, ("time", "Number_of_points"), arr.astype("f4"))
+        var("CO2air", ("time", "Number_of_points"),
+            np.full((nt, npF), 0.00062, "f4"))   # ~400 ppm en kg/kg
+
+    if not keep_grib:
+        for g in wd.glob("arome_*.grib2*"):
+            g.unlink()
+    return str(fpath), nt, npF
 
 
 if __name__ == "__main__":
+    import sys
     run = latest_run()
-    print(f"dernier run AROME : {_run_iso(run)}")
-    print("packages/variables :", PKG_VARS)
+    wd = sys.argv[1] if len(sys.argv) > 1 else "."
+    print(f"run AROME {_run_iso(run)} → forcing dans {wd}")
+    pgd = sys.argv[2] if len(sys.argv) > 2 else "PGD.nc"
+    path, nt, npF = build_forcing(run, wd, pgd)
+    print(f"→ {path} : {nt} pas de temps × {npF} points")

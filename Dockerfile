@@ -13,7 +13,7 @@ FROM ubuntu:22.04 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       gfortran make perl libnetcdff-dev \
-      python3 python3-pip python3-venv ca-certificates \
+      python3 python3-dev python3-pip python3-venv ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src

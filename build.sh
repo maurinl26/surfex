@@ -155,12 +155,18 @@ fi
 # cible `ecoclimap` qui régénère les .bin (recette cassée from-scratch ; les
 # covers sont versionnés dans MY_RUN/ECOCLIMAP/).
 "${MK[@]}" progmaster
-"${MK[@]}" installmaster || true
 
-# Étape 3 : archive la bibliothèque MASTER — dépendance du package Python. La lib
-# de make est .INTERMEDIATE (détruite après link) ; on l'archive nous-mêmes depuis
-# les .o (tous compilés en -fpic), vers un chemin stable exe/libsurfex.a.
+# Étape 3 : installe les exécutables dans exe/ (copie directe depuis le dir objet
+# — robuste, indépendant du target installmaster qui résout mal $(SRC_SURFEX)/exe
+# quand le repo est monté ailleurs, ex. /src dans Docker).
 mkdir -p "$ROOT/exe"
+for prog in PGD PREP OFFLINE SODA; do
+  [ -f "$OBJM/$prog" ] && cp -f "$OBJM/$prog" "$ROOT/exe/$prog"
+done
+
+# Archive la bibliothèque MASTER — dépendance du package Python. La lib de make
+# est .INTERMEDIATE (détruite après link) ; on l'archive nous-mêmes depuis les .o
+# (tous compilés en -fpic), vers un chemin stable exe/libsurfex.a.
 LIBA="$ROOT/exe/libsurfex.a"
 rm -f "$LIBA"
 ( cd "$OBJM" && find -L . -name '*.o' -print0 | xargs -0 "${AR:-ar}" rc "$LIBA" )

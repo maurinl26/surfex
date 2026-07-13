@@ -69,6 +69,7 @@ py.install_sources(
     'karpos_surfex/__init__.py',
     'karpos_surfex/driver.py',
     'karpos_surfex/orchestrate.py',
+    'karpos_surfex/sencrop.py',
     'karpos_surfex/__main__.py',
   ],
   subdir: 'karpos_surfex',

@@ -1,0 +1,34 @@
+! ============================================================================
+! SODA — assimilation de surface Drôme (OI T2m, obs Sencrop grillées)
+! À utiliser après PGD + PREP (first-guess) + ingestion Sencrop → OBSERVATIONS.nc
+!   ks.sencrop.ingest_to_soda_obs(root, t, 'PGD.nc', 'OBSERVATIONS.nc')
+!   ks.run_soda(workdir)
+! ⚠️  Template — à valider avec un first-guess PREP + fichiers climatologie.
+! ============================================================================
+
+&NAM_ASSIM   LASSIM      = T,
+             CASSIM      = 'PLUS  ',      ! cadre (increment)
+             CASSIM_ISBA = 'OI_MAIN',     ! méthode : OI (interpolation optimale)
+             NPRINTLEV   = 1,
+             CFILE_FORMAT_FG  = 'NC    ',
+             CFILE_FORMAT_LSM = 'NC    ',
+             CFILE_FORMAT_CLIM= 'NC    '
+/
+
+! Observations : T2m grillé (Sencrop) lu depuis OBSERVATIONS.nc via READ_SURF('NC','T2M')
+&NAM_OBS     NOBSTYPE = 1,
+             COBS_M(1) = 'T2M',
+             NNCO(1)   = 1,               ! T2m actif
+             XERROBS_M(1) = 1.0,          ! écart-type d'erreur d'obs (K)
+             CFILE_FORMAT_OBS = 'NC    ',
+             LOBSHEADER = F,
+             LOBSNAT    = F
+/
+
+! Paramètres OI végétation/sol (rappel obs T2m → humidité/température sol)
+&NAM_NACVEG  NECHGU   = 24,               ! échéance guess (h)
+             XSIGT2MO = 1.0,              ! σ obs T2m (K)
+             XSIGH2MO = 0.1,              ! σ obs HU2m
+             LOBS2M   = T,
+             LOBSWG   = F
+/

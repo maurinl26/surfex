@@ -1,0 +1,45 @@
+! ============================================================================
+! Domaine Karpos — Drôme-Ardèche, grille 1 km (SURFEX PGD/PREP/OFFLINE)
+! bbox ~44–45,5°N × 4–5,5°E · Lambert conforme centré 44,75°N / 4,75°E
+! Cover ECOCLIMAP-II · orographie uniforme (1er smoke ; DEM réel ensuite)
+! ============================================================================
+
+! --- Cover : SMOKE géométrie = cover uniforme prescrit (params depuis les .bin).
+! Domaine RÉEL : LECOCLIMAP=T + carte de cover ECOCLIMAP-II (YCOVER, à télécharger).
+&NAM_FRAC              LECOCLIMAP = F
+/
+&NAM_COVER             XUNIF_COVER(4) = 1.0       ! classe unique (smoke)
+/
+
+! --- Grille : projection conforme (Lambert), 1 km ---------------------------
+&NAM_PGD_GRID          CGRID = 'CONF PROJ'
+/
+&NAM_CONF_PROJ         XLAT0 = 45.0,
+                       XLON0 = 4.75,
+                       XRPK  = 0.70711,     ! sin(45°) — cône Lambert tangent
+                       XBETA = 0.0
+/
+&NAM_CONF_PROJ_GRID    XLATCEN = 44.75,
+                       XLONCEN = 4.75,
+                       NIMAX   = 120,        ! ~120 km O-E
+                       NJMAX   = 168,        ! ~168 km S-N
+                       XDX     = 1000.,
+                       XDY     = 1000.
+/
+
+! --- Schémas de surface -----------------------------------------------------
+&NAM_PGD_SCHEMES       CNATURE = 'ISBA  ',
+                       CSEA    = 'SEAFLX',
+                       CTOWN   = 'TEB   ',
+                       CWATER  = 'WATFLX'
+/
+
+! --- Orographie : uniforme pour le 1er smoke (DEM SRTM/IGN ensuite) ---------
+&NAM_ZS                XUNIF_ZS = 300.
+/
+
+! --- E/S : sortie NetCDF ----------------------------------------------------
+&NAM_IO_OFFLINE        LPRINT           = T,
+                       CSURF_FILETYPE   = 'NC    ',
+                       CTIMESERIES_FILETYPE = 'NC    '
+/

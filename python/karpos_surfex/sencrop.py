@@ -132,8 +132,68 @@ def load_observations(
 
 
 def ingest_to_obs(root, timestamp, out_path="OBS_sencrop.nc", **kwargs):
-    """Charge les obs Sencrop et écrit le fichier d'obs SODA (via set_obs)."""
+    """Charge les obs Sencrop et écrit un fichier d'obs points (lat/lon/K)."""
     from . import driver
     lats, lons, tK = load_observations(root, timestamp, **kwargs)
     driver.set_obs(lats, lons, tK, out_path)
+    return out_path, len(lats)
+
+
+# --- Opérateur d'observation : stations → grille modèle (pour SODA) ----------
+
+def to_grid(lats, lons, vals, pgd_path, method: str = "linear"):
+    """Interpole des obs de stations sur la grille du PGD → champ 2D (yy, xx).
+
+    SODA assimile des champs T2m/HU2m **grillés** (READ_SURF('NC','T2M',…)), pas
+    des points. Cet opérateur projette les stations Sencrop sur la grille modèle.
+    Interpolation `method` à l'intérieur, complétée au plus proche voisin ailleurs.
+    """
+    import numpy as np
+    from netCDF4 import Dataset
+    from scipy.interpolate import griddata
+
+    with Dataset(str(pgd_path)) as ds:
+        glat = np.asarray(ds.variables["LAT"][:], dtype="f8")   # (yy, xx)
+        glon = np.asarray(ds.variables["LON"][:], dtype="f8")
+
+    pts = np.column_stack([np.asarray(lons, "f8"), np.asarray(lats, "f8")])
+    tgt = (glon, glat)
+    grid = griddata(pts, np.asarray(vals, "f8"), tgt, method=method)
+    holes = ~np.isfinite(grid)
+    if holes.any():   # hors enveloppe convexe → plus proche voisin
+        grid[holes] = griddata(pts, np.asarray(vals, "f8"), tgt, method="nearest")[holes]
+    return grid
+
+
+def write_obs_file(pgd_path, field, out_path, varname: str = "T2M"):
+    """Écrit un fichier d'obs SODA : copie du PGD + champ `varname` (yy, xx).
+
+    Réutilise la structure SURFEX valide du PGD.nc (grille, en-têtes) → lisible
+    tel quel par READ_SURF('NC', varname, …).
+    """
+    import shutil
+    import numpy as np
+    from netCDF4 import Dataset
+
+    shutil.copyfile(str(pgd_path), str(out_path))
+    with Dataset(str(out_path), "a") as ds:
+        if varname in ds.variables:
+            v = ds.variables[varname]
+        else:
+            v = ds.createVariable(varname, "f8", ("yy", "xx"))
+        v[:] = np.asarray(field, "f8")
+        v.long_name = f"{varname} observation (Sencrop, grillé)"
+    return str(out_path)
+
+
+def ingest_to_soda_obs(root, timestamp, pgd_path, out_path="OBSERVATIONS.nc",
+                       varname="T2M", method="linear", **kwargs):
+    """Pipeline complet Sencrop → champ d'obs grillé SURFEX pour SODA.
+
+    Charge les obs, les grille sur le PGD, écrit le NC d'obs (variable `varname`).
+    Namelist SODA : &NAM_OBS COBS_M='T2M', NNCO(1)=1, CFILE_FORMAT_OBS='NC'.
+    """
+    lats, lons, tK = load_observations(root, timestamp, **kwargs)
+    grid = to_grid(lats, lons, tK, pgd_path, method=method)
+    write_obs_file(pgd_path, grid, out_path, varname=varname)
     return out_path, len(lats)

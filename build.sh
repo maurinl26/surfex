@@ -11,7 +11,10 @@
 # ensuite envelopper la lib statique pour le packaging Python (scikit-build).
 #
 # Usage :
-#   ./build.sh [--compiler gfortran|flang] [--debug] [--jobs N] [--clean]
+#   ./build.sh [--compiler gfortran|flang|ifort] [--debug] [--jobs N] [--clean]
+#
+# Compilateurs : gfortran (défaut, macOS/Linux), flang (scaffold), ifort (HPC/Linux).
+# NetCDF : détecté via nf-config (Homebrew, apt, ou `module load netcdf-fortran`).
 #
 set -euo pipefail
 
@@ -46,15 +49,22 @@ esac
 case "$COMPILER" in
   gfortran)
     command -v gfortran >/dev/null || { echo "gfortran introuvable dans le PATH" >&2; exit 1; }
+    export ARCH="${OSPFX}gfortran"          # MCgfortran / LXgfortran
     ;;
   flang)
     command -v flang >/dev/null || command -v flang-new >/dev/null || {
       echo "flang introuvable dans le PATH" >&2; exit 1; }
     echo "⚠️  Profil flang NON VALIDÉ (scaffold) — repli conseillé : --compiler gfortran"
+    export ARCH="${OSPFX}flang"             # MCflang / LXflang
     ;;
-  *) echo "Compilateur non supporté : $COMPILER (gfortran|flang)" >&2; exit 1 ;;
+  ifort)
+    # Toolchain Intel classique (HPC). Linux uniquement.
+    [ "$OSPFX" = "LX" ] || { echo "ifort : Linux uniquement" >&2; exit 1; }
+    command -v ifort >/dev/null || { echo "ifort introuvable (module load intel ?)" >&2; exit 1; }
+    export ARCH="LXifort"                   # Rules.LXifort.mk (-r8 -convert big_endian)
+    ;;
+  *) echo "Compilateur non supporté : $COMPILER (gfortran|flang|ifort)" >&2; exit 1 ;;
 esac
-export ARCH="${OSPFX}${COMPILER}"   # MCgfortran, LXgfortran, MCflang, LXflang
 
 if [ ! -f "$ROOT/src/Rules.${ARCH}.mk" ]; then
   echo "Profil de règles manquant : src/Rules.${ARCH}.mk" >&2; exit 1
@@ -123,33 +133,33 @@ OBJM="$(ls -d "$ROOT"/src/dir_obj-*/MASTER 2>/dev/null | head -1)"
 if [ -n "$OBJM" ]; then
   mkdir -p "$OBJM/MOD"
   echo "→ compile stub grib_api → $OBJM/MOD/grib_api.mod"
+  # STUB_MOD : option de répertoire de modules (-J gfortran/flang, -module Intel)
   case "$COMPILER" in
-    gfortran) STUB_FC=gfortran
+    gfortran) STUB_FC=gfortran; STUB_MOD="-J"
       STUB_FLAGS="-fdefault-real-8 -fdefault-double-8 -fno-second-underscore -fconvert=swap -fallow-argument-mismatch -fallow-invalid-boz -O0 -cpp" ;;
-    flang)    STUB_FC="$(command -v flang || command -v flang-new)"
+    flang)    STUB_FC="$(command -v flang || command -v flang-new)"; STUB_MOD="-J"
       STUB_FLAGS="-fdefault-real-8 -fdefault-double-8 -O0 -cpp" ;;
+    ifort)    STUB_FC=ifort; STUB_MOD="-module "
+      STUB_FLAGS="-r8 -convert big_endian -O0 -fpp" ;;
   esac
   # shellcheck disable=SC2086
-  "$STUB_FC" ${STUB_FLAGS} -J"$OBJM/MOD" -c "$ROOT/python/capi/grib_api_stub.F90" -o "$OBJM/grib_api_stub.o"
+  "$STUB_FC" ${STUB_FLAGS} ${STUB_MOD}"$OBJM/MOD" -c "$ROOT/python/capi/grib_api_stub.F90" -o "$OBJM/grib_api_stub.o"
 fi
 
-# Étape 2 : compiler tous les objets (la lib MASTER de SURFEX est .INTERMEDIATE,
-# make la détruit après link ; on compile les .o puis on archive nous-mêmes).
-"${MK[@]}" objmaster
+# Étape 2 : build complet (génération des dépendances + compilation + link des
+# exécutables OFFLINE/PGD/PREP/SODA). `make` sans cible = chaîne complète.
+"${MK[@]}"
+"${MK[@]}" installmaster || true
 
-# Archive la bibliothèque MASTER — dépendance du package Python — directement
-# depuis les .o (comme le fait le Makefile en interne), chemin stable exe/libsurfex.a.
+# Étape 3 : archive la bibliothèque MASTER — dépendance du package Python. La lib
+# de make est .INTERMEDIATE (détruite après link) ; on l'archive nous-mêmes depuis
+# les .o (tous compilés en -fpic), vers un chemin stable exe/libsurfex.a.
 mkdir -p "$ROOT/exe"
 LIBA="$ROOT/exe/libsurfex.a"
 rm -f "$LIBA"
 ( cd "$OBJM" && find -L . -name '*.o' -print0 | xargs -0 "${AR:-ar}" rc "$LIBA" )
 "${RANLIB:-ranlib}" "$LIBA" 2>/dev/null || true
 echo "→ bibliothèque : exe/libsurfex.a ($(du -h "$LIBA" | cut -f1))"
-
-# Étape 3 : exécutables OFFLINE/PGD/PREP/SODA (best-effort — non requis pour le
-# package ; utiles pour les cas-tests MY_RUN).
-"${MK[@]}" || echo "⚠️  link exécutables incomplet (voir log) — libsurfex.a est OK"
-"${MK[@]}" installmaster || true
 
 echo "──────────────────────────────────────────────────────────"
 echo " Build terminé."

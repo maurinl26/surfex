@@ -1,0 +1,49 @@
+name: Release HPC
+
+# Sur tag vX.Y.Z : construit un tarball source auto-suffisant (buildable hors
+# ligne sur un nœud de connexion HPC) et l'attache à la GitHub Release.
+# Complémentaire de publish.yml (wheels PyPI).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  source-tarball:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # créer la release + attacher les assets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construire le tarball source
+        run: |
+          VER="${GITHUB_REF_NAME:-dev}"
+          NAME="karpos-surfex-${VER}"
+          mkdir -p dist
+          # git archive : uniquement les fichiers versionnés (exclut artefacts de
+          # build, XIOS 85 Mo non versionné). Respecte .gitattributes export-ignore.
+          git archive --format=tar.gz --prefix="${NAME}/" \
+            -o "dist/${NAME}-src.tar.gz" HEAD
+          sha256sum "dist/${NAME}-src.tar.gz" > "dist/${NAME}-src.tar.gz.sha256"
+          ls -lh dist/
+
+      - name: Publier la release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*-src.tar.gz
+            dist/*-src.tar.gz.sha256
+          generate_release_notes: true
+          body: |
+            ## Build sur HPC classique
+
+            ```bash
+            tar xzf karpos-surfex-*-src.tar.gz && cd karpos-surfex-*
+            module load gcc netcdf-fortran      # ou : module load intel netcdf
+            ./build.sh --compiler gfortran       # ou --compiler ifort
+            pip install ./python -Csetup-args=-Dsurfex_lib=$PWD/exe/libsurfex.a
+            ```
+
+            Détails : `docs/HPC.md`.

@@ -48,6 +48,27 @@ python -m karpos_surfex run \
 Puis `--steps pgd,prep,offline` une fois PREP (init NetCDF/uniforme) et le
 forcing NetCDF (CERRA, #4) en place.
 
+## Forcing AROME (#4) & run OFFLINE
+
+- `arome_to_forcing.py` — AROME public (OVH) → `FORCING.nc` sur la grille PGD 1 km.
+  **Opérationnel** (testé : 6 pas × 20160 pts, valeurs plausibles). SWdown≈ssr
+  (proxy), précip=0 (nuits de gel sèches) — à raffiner.
+- `OPTIONS_run.nam` — namelist PGD + PREP (uniforme) + OFFLINE (forcing NC).
+
+### ⛔ Blocage OFFLINE : PREP veut un first-guess GRIB
+
+PGD ✅. PREP initialise WGI/WR/SN_VEG/LAI en uniforme, mais l'**état sol primaire
+(WG/TG)** réclame un fichier atmosphérique GRIB (`HFILETYPE`), non contournable via
+namelist (testé : XUNIF, ISBA-seul, `CISBA='3-L'`, `CFILE/CFILETYPE` blancs).
+Comportement de la distribution — même le cas de référence `cdp9697` gribe.
+
+**Débloquage (prochaine session focalisée)** :
+1. Construire **eccodes** (support GRIB réel — supprime le stub) puis fournir un
+   first-guess GRIB (analyse ECMWF/AROME sol, ou climatologie), OU
+2. Patcher SURFEX pour autoriser un PREP 100 % uniforme (init sans fichier).
+
+Tout l'amont est prêt (grille + orographie + forcing AROME + obs Sencrop).
+
 ## Fichiers
 
-- `OPTIONS.nam` — namelist PGD/PREP/OFFLINE du domaine.
+- `OPTIONS.nam` — namelist PGD (smoke). `OPTIONS_run.nam` — chaîne complète.

@@ -1,0 +1,8 @@
+# Archive XIOS (85 Mo) — dépendance tierce reconstructible, exclue du versionnement
+# Récupérable depuis la distribution CNRM ou le dépôt XIOS (tag GMGEC-2152).
+src/LIB/XIOS-GMGEC-2152.tar
+
+# Binaires compilés
+exe/PGD
+exe/PREP
+exe/OFFLINE

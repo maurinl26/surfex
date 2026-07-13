@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain Fortran + NetCDF (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libnetcdff-dev
+
+      - name: Toolchain Fortran + NetCDF (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gcc netcdf-fortran
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build libsurfex.a (chaîne SURFEX + stub grib)
+        run: ./build.sh --compiler gfortran
+
+      - name: Build wheel (meson-python)
+        working-directory: python
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel \
+            -Csetup-args=-Dsurfex_lib=${GITHUB_WORKSPACE}/exe/libsurfex.a
+
+      - name: Smoke test (import + cycle de vie)
+        working-directory: python
+        run: |
+          python -m pip install dist/*.whl
+          python -c "import karpos_surfex as ks; ks.init(); ks.finalize(); print('OK', ks.__version__)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}
+          path: python/dist/*.whl

@@ -133,11 +133,25 @@ if [ -n "$OBJM" ]; then
   "$STUB_FC" ${STUB_FLAGS} -J"$OBJM/MOD" -c "$ROOT/python/capi/grib_api_stub.F90" -o "$OBJM/grib_api_stub.o"
 fi
 
-# Étape 2 : compilation complète (make trouve grib_api.mod via -I MOD,
-# et archive grib_api_stub.o via le glob *.o).
-"${MK[@]}"
-"${MK[@]}" installmaster
+# Étape 2 : compiler tous les objets (la lib MASTER de SURFEX est .INTERMEDIATE,
+# make la détruit après link ; on compile les .o puis on archive nous-mêmes).
+"${MK[@]}" objmaster
+
+# Archive la bibliothèque MASTER — dépendance du package Python — directement
+# depuis les .o (comme le fait le Makefile en interne), chemin stable exe/libsurfex.a.
+mkdir -p "$ROOT/exe"
+LIBA="$ROOT/exe/libsurfex.a"
+rm -f "$LIBA"
+( cd "$OBJM" && find -L . -name '*.o' -print0 | xargs -0 "${AR:-ar}" rc "$LIBA" )
+"${RANLIB:-ranlib}" "$LIBA" 2>/dev/null || true
+echo "→ bibliothèque : exe/libsurfex.a ($(du -h "$LIBA" | cut -f1))"
+
+# Étape 3 : exécutables OFFLINE/PGD/PREP/SODA (best-effort — non requis pour le
+# package ; utiles pour les cas-tests MY_RUN).
+"${MK[@]}" || echo "⚠️  link exécutables incomplet (voir log) — libsurfex.a est OK"
+"${MK[@]}" installmaster || true
 
 echo "──────────────────────────────────────────────────────────"
-echo " Build terminé. Binaires dans exe/ :"
-ls -1 "$ROOT"/exe/ 2>/dev/null | grep -Ev '^empty.txt$' || echo "  (aucun binaire — voir le log)"
+echo " Build terminé."
+echo " Bibliothèque : $([ -f "$ROOT/exe/libsurfex.a" ] && echo "$ROOT/exe/libsurfex.a ✅" || echo "ABSENTE ❌")"
+echo " Binaires exe/ : $(ls -1 "$ROOT"/exe/ 2>/dev/null | grep -Ev '^empty.txt$|libsurfex.a' | tr '\n' ' ' || echo '(aucun)')"

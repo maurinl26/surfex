@@ -1,0 +1,73 @@
+name: Publish
+
+# Publie sur PyPI à chaque tag vX.Y.Z, via Trusted Publishing (OIDC — pas de token).
+# Prérequis côté PyPI : configurer un "pending publisher" pour ce repo/workflow
+#   → https://pypi.org/manage/account/publishing/  (workflow: publish.yml, env: pypi)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-wheels:
+    name: wheel (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain Fortran + NetCDF (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libnetcdff-dev
+
+      - name: Toolchain Fortran + NetCDF (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gcc netcdf-fortran
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build libsurfex.a
+        run: ./build.sh --compiler gfortran
+
+      - name: Build wheel
+        working-directory: python
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel \
+            -Csetup-args=-Dsurfex_lib=${GITHUB_WORKSPACE}/exe/libsurfex.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: python/dist/*.whl
+
+  publish:
+    name: Publier sur PyPI
+    needs: [build-wheels]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/karpos-surfex
+    permissions:
+      id-token: write        # requis pour le Trusted Publishing OIDC
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publier
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          # Décommenter pour tester d'abord sur TestPyPI :
+          # repository-url: https://test.pypi.org/legacy/

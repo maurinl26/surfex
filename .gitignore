@@ -2,10 +2,16 @@
 # Récupérable depuis la distribution CNRM ou le dépôt XIOS (tag GMGEC-2152).
 src/LIB/XIOS-GMGEC-2152.tar
 
-# Binaires compilés
-exe/PGD
-exe/PREP
-exe/OFFLINE
+# Binaires compilés (tout exe/ sauf le placeholder)
+exe/*
+!exe/empty.txt
+
+# Artefacts de packaging Python
+python/build/
+python/dist/
+python/*.egg-info/
+**/__pycache__/
+python/karpos_surfex/_surfex.c
 
 # --- Artefacts de build générés par build.sh / configure ---
 # Profils d'environnement générés

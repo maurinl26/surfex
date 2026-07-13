@@ -29,10 +29,12 @@ fflags = fc.get_supported_arguments(
   '-fconvert=swap', '-fallow-argument-mismatch', '-fallow-invalid-boz',
 )
 
-# --- Couche C-ABI : shim + stub grib -----------------------------------------
+# --- Couche C-ABI : shim seul --------------------------------------------------
+# (grib_api_stub.F90 est compilé dans libsurfex.a par ../build.sh — pas ici,
+#  sinon symboles dupliqués au link.)
 capi = static_library(
   'sfx_capi',
-  ['capi/grib_api_stub.F90', 'capi/sfx_capi.F90'],
+  ['capi/sfx_capi.F90'],
   fortran_args: fflags,
   install: false,
 )

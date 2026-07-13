@@ -76,6 +76,26 @@ Le `PREP.nc` produit sert de first-guess pour SODA (#7).
 ⚠️ Le temps du PREP (`XTIME`) doit == le 1er pas du forcing (le join SP3 accumulé
 décale d'1 h). Limites forcing : SWdown proxy, précip=0 (à raffiner, #4).
 
+## Assimilation Sencrop (#7) — SODA
+
+État : **mécanisme SODA validé**, blocage sur le forcing de période de gel (data, pas code).
+
+- Ingestion Sencrop → obs grillées → **injectées dans l'état SURFEX** (`sencrop.py`).
+- **SODA tourne** (`OPTIONS_soda.nam`, nuit de gel 2023-04-05) : lit les obs T2M/HU2M
+  sur la vraie grille Drôme, atteint l'étage d'analyse.
+- **Blocage analyse** — les deux méthodes butent sur la **même contrainte** :
+  - **OI** (`CASSIM_ISBA='OI'`) : first-guess **FA** opérationnel MF (précip/nébulosité/flux CANARI).
+  - **EKF/SEKF** (`CASSIM_ISBA='EKF'`) : `PREP_INIT.nc` + prévisions **perturbées** → il faut
+    faire tourner OFFLINE sur la période de gel.
+  - Or **pas de forcing pour les saisons de gel** : AROME public = temps-réel seul,
+    AROME **archive** = verrou MF (#11), CERRA S3 = t2m-only.
+
+**Donc #7 (comme #5) dépend de l'archive AROME (MF) pour l'historique.** Le socle
+technique (SURFEX + SODA + ingestion Sencrop) est complet et validé ; la validation
+sur événements de gel réels attend le forcing archive.
+
 ## Fichiers
 
-- `OPTIONS.nam` — namelist PGD (smoke). `OPTIONS_run.nam` — chaîne complète.
+- `OPTIONS.nam` — PGD smoke. `OPTIONS_run.nam` — chaîne OFFLINE (AROME).
+- `OPTIONS_soda.nam` — chaîne SODA (PGD+PREP+assimilation OI/EKF).
+- `arome_to_forcing.py`, `dem_to_surfex.py` — converters forcing/DEM.

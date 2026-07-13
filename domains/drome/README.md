@@ -13,21 +13,27 @@ Grille SURFEX pour la détection de gel arboricole Drôme-Ardèche (EPIC D).
 
 ## État
 
-- ✅ **Géométrie de grille validée** : `PGD` produit `PGD.nc` (xx=120, yy=168).
-  Smoke avec **cover uniforme prescrit** (`NAM_COVER XUNIF_COVER(4)`) et
-  **orographie uniforme** (`XUNIF_ZS=300`) — valide la grille sans données externes.
-- ⏳ **Physiographie réelle** : nécessite deux jeux de données à acquérir.
+- ✅ **Grille + orographie réelle validées** : `PGD` produit `PGD.nc` (120×168) avec
+  l'orographie **IGN BD ALTI** — ZS ∈ [20,6 ; 1826,9] m (fonds de vallée → Diois/Vercors).
+- ⏳ **Cover réel** : encore uniforme (`NAM_COVER XUNIF_COVER(4)`) — attend la
+  carte ECOCLIMAP-II.
 
-## Données à acquérir (physiographie réelle)
+## Orographie — DEM IGN (opérationnel)
 
-Pour un `PGD` physiquement correct, remplacer les valeurs uniformes par :
+```bash
+# DEM sur S3 : s3://karpos-backtest-data/downscaling/dem/dem_attributes.nc (IGN BD ALTI)
+python dem_to_surfex.py dem_attributes.nc DROME_ZS   # → DROME_ZS.dir + .hdr
+# namelist : &NAM_ZS YZS='DROME_ZS', YZSFILETYPE='DIRECT'
+```
 
-1. **Carte de cover ECOCLIMAP-II** (`LECOCLIMAP=T` + `NAM_COVER YCOVER=...`).
-   Raster global (~Go). Source : Météo-France / CNRM (cf. licence #10 pour SG).
-2. **DEM** pour l'orographie (`NAM_ZS YZS=...`) :
-   - SRTM 30 m (OpenTopography / USGS) — libre, global.
-   - IGN BD ALTI 25 m — libre, France, meilleure qualité locale.
-   Agrégé à 1 km par les routines `average_orography` de PGD.
+`dem_to_surfex.py` convertit le NetCDF (elevation, lat, lon) en raster SURFEX
+`DIRECT` (INTEGER*2 big-endian) ; PGD (`average_orography`) l'agrège à 1 km.
+
+## Données restantes
+
+- **Carte de cover ECOCLIMAP-II** (`LECOCLIMAP=T` + `NAM_COVER YCOVER=...`) : raster
+  global (~Go), source Météo-France / CNRM (cf. licence #10 pour SG). En attendant,
+  cover uniforme prescrit.
 
 ## Lancer
 

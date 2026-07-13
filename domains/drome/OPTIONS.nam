@@ -34,8 +34,9 @@
                        CWATER  = 'WATFLX'
 /
 
-! --- Orographie : uniforme pour le 1er smoke (DEM SRTM/IGN ensuite) ---------
-&NAM_ZS                XUNIF_ZS = 300.
+! --- Orographie : DEM IGN BD ALTI (généré par dem_to_surfex.py depuis S3).
+! Repli smoke sans données : remplacer par  XUNIF_ZS = 300.
+&NAM_ZS                YZS = 'DROME_ZS', YZSFILETYPE = 'DIRECT'
 /
 
 ! --- E/S : sortie NetCDF ----------------------------------------------------

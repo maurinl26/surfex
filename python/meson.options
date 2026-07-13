@@ -1,0 +1,6 @@
+option(
+  'surfex_lib',
+  type: 'string',
+  value: '',
+  description: 'Chemin vers libsurfex.a pré-construite (via ../build.sh). Vide = shim seul.',
+)

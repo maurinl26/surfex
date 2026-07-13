@@ -114,6 +114,27 @@ set -eu
 MK=(make -j"$JOBS" INC_NETCDF="$INC_NETCDF" LIB_NETCDF="$LIB_NETCDF")
 [ "$DO_CLEAN" = 1 ] && "${MK[@]}" clean || true
 
+# Stub grib_api : cette distribution suppose grib_api toujours présent (USE non
+# gardé dans modd_grid_grib / mode_read_grib). Forcings OFFLINE = NetCDF, donc
+# on fournit un stub (grib_api.mod) plutôt que de dépendre d'eccodes.
+# Étape 1 : créer les répertoires objets/MOD.
+"${MK[@]}" objdirmaster
+OBJM="$(ls -d "$ROOT"/src/dir_obj-*/MASTER 2>/dev/null | head -1)"
+if [ -n "$OBJM" ]; then
+  mkdir -p "$OBJM/MOD"
+  echo "→ compile stub grib_api → $OBJM/MOD/grib_api.mod"
+  case "$COMPILER" in
+    gfortran) STUB_FC=gfortran
+      STUB_FLAGS="-fdefault-real-8 -fdefault-double-8 -fno-second-underscore -fconvert=swap -fallow-argument-mismatch -fallow-invalid-boz -O0 -cpp" ;;
+    flang)    STUB_FC="$(command -v flang || command -v flang-new)"
+      STUB_FLAGS="-fdefault-real-8 -fdefault-double-8 -O0 -cpp" ;;
+  esac
+  # shellcheck disable=SC2086
+  "$STUB_FC" ${STUB_FLAGS} -J"$OBJM/MOD" -c "$ROOT/python/capi/grib_api_stub.F90" -o "$OBJM/grib_api_stub.o"
+fi
+
+# Étape 2 : compilation complète (make trouve grib_api.mod via -I MOD,
+# et archive grib_api_stub.o via le glob *.o).
 "${MK[@]}"
 "${MK[@]}" installmaster
 

@@ -46,9 +46,10 @@ jobs:
             -Csetup-args=-Dsurfex_lib=${GITHUB_WORKSPACE}/exe/libsurfex.a
 
       - name: Smoke test (import + cycle de vie)
-        working-directory: python
         run: |
-          python -m pip install dist/*.whl
+          python -m pip install python/dist/*.whl
+          # Importer hors de python/ pour éviter le shadowing par le dossier source
+          cd "$RUNNER_TEMP"
           python -c "import karpos_surfex as ks; ks.init(); ks.finalize(); print('OK', ks.__version__)"
 
       - uses: actions/upload-artifact@v4

@@ -120,6 +120,10 @@ set +eu
 . "$PROFILE"
 set -eu
 
+# Garantit que les outils de génération de dépendances (splr.pl, spll, …) sont
+# trouvés, quelle que soit la façon dont le profil a construit le PATH.
+export PATH="$ROOT/bin:$PATH"
+
 # --- Compilation (INC/LIB en ligne de commande = surcharge toute règle) -----
 MK=(make -j"$JOBS" INC_NETCDF="$INC_NETCDF" LIB_NETCDF="$LIB_NETCDF")
 [ "$DO_CLEAN" = 1 ] && "${MK[@]}" clean || true
@@ -146,9 +150,11 @@ if [ -n "$OBJM" ]; then
   "$STUB_FC" ${STUB_FLAGS} ${STUB_MOD}"$OBJM/MOD" -c "$ROOT/python/capi/grib_api_stub.F90" -o "$OBJM/grib_api_stub.o"
 fi
 
-# Étape 2 : build complet (génération des dépendances + compilation + link des
-# exécutables OFFLINE/PGD/PREP/SODA). `make` sans cible = chaîne complète.
-"${MK[@]}"
+# Étape 2 : build des programmes maîtres (deps + compilation + link de
+# OFFLINE/PGD/PREP/SODA). On cible `progmaster` — et NON `all` — pour éviter la
+# cible `ecoclimap` qui régénère les .bin (recette cassée from-scratch ; les
+# covers sont versionnés dans MY_RUN/ECOCLIMAP/).
+"${MK[@]}" progmaster
 "${MK[@]}" installmaster || true
 
 # Étape 3 : archive la bibliothèque MASTER — dépendance du package Python. La lib

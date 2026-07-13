@@ -42,20 +42,28 @@ possible plus tard si justifié.
 **Le « nudging Sencrop » = `set_obs()` + `run_soda()`** : l'assimilation passe par
 le moteur natif SURFEX (SODA), pas par un module ad hoc. Cf. `karpos-downscaling#30`.
 
-## Build
+## Build (uv — env géré, aligné sur karpos-engine)
+
+Environnement Python géré par **uv** (Python épinglé dans `.python-version` = 3.11).
 
 ```bash
-# 1) (optionnel) produire libsurfex.a via la chaîne SURFEX
+# 1) produire libsurfex.a via la chaîne SURFEX
 cd .. && ./build.sh --compiler gfortran
 
-# 2) installer le package
+# 2a) build du wheel
 cd python
-pip install . -Csetup-args=-Dsurfex_lib=/chemin/vers/libsurfex.a
-# ou sans lib (shim seul, pour développer l'ABI/Cython) :
-pip install .
+uv build --wheel --config-setting=setup-args=-Dsurfex_lib=$PWD/../exe/libsurfex.a
+
+# 2b) ou installer en editable pour développer
+uv venv
+uv pip install -e . --config-setting=setup-args=-Dsurfex_lib=$PWD/../exe/libsurfex.a
+uv run --with netCDF4 python -c "import karpos_surfex as ks; print(ks.__version__)"
 ```
 
-Prérequis : `gfortran`, `netcdf-fortran` (`nf-config`), `meson-python`, `cython`, `numpy`.
+Repli pip : `pip install . -Csetup-args=-Dsurfex_lib=…` (identique).
+
+Prérequis système : `gfortran`, `netcdf-fortran` (`nf-config`). uv gère Python +
+`meson-python`, `cython`, `numpy` automatiquement.
 
 ## Exemple
 

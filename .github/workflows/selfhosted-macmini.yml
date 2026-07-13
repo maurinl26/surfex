@@ -35,12 +35,16 @@ jobs:
       - name: Build SURFEX + libsurfex.a
         run: ./build.sh --compiler gfortran
 
-      - name: Installer le package (venv)
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.11'
+
+      - name: Installer le package (uv venv)
         run: |
-          python3 -m venv .venv
-          ./.venv/bin/pip install -q --upgrade pip
-          ./.venv/bin/pip install -q ./python \
-            -Csetup-args=-Dsurfex_lib=$GITHUB_WORKSPACE/exe/libsurfex.a
+          uv venv .venv
+          uv pip install --python .venv ./python \
+            --config-setting=setup-args=-Dsurfex_lib=$GITHUB_WORKSPACE/exe/libsurfex.a
 
       - name: Smoke — orchestration PGD réelle (cas cdp9697)
         env:

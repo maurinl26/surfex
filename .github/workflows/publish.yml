@@ -30,19 +30,19 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install gcc netcdf-fortran
 
-      - uses: actions/setup-python@v5
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
       - name: Build libsurfex.a
         run: ./build.sh --compiler gfortran
 
-      - name: Build wheel
+      - name: Build wheel (uv + meson-python)
         working-directory: python
         run: |
-          python -m pip install --upgrade pip build
-          python -m build --wheel \
-            -Csetup-args=-Dsurfex_lib=${GITHUB_WORKSPACE}/exe/libsurfex.a
+          uv build --wheel \
+            --config-setting=setup-args=-Dsurfex_lib=${GITHUB_WORKSPACE}/exe/libsurfex.a
 
       - uses: actions/upload-artifact@v4
         with:

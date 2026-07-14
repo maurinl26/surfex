@@ -94,8 +94,31 @@ décale d'1 h). Limites forcing : SWdown proxy, précip=0 (à raffiner, #4).
 technique (SURFEX + SODA + ingestion Sencrop) est complet et validé ; la validation
 sur événements de gel réels attend le forcing archive.
 
+## ✅ Baseline CERRA vs Sencrop (#16/#5) — validé sur gel réel
+
+CERRA `reanalysis-cerra-single-levels` est **public** (Copernicus CDS, pas de MF) →
+débloque les saisons de gel historiques (`cerra_to_forcing.py`).
+
+**Run 2023-04-04→06 (épisode de gel Drôme), forcing CERRA → SURFEX 1 km :**
+
+| @ 2023-04-05 04h | Sencrop (air 2 m) | T_skin SURFEX (CERRA) |
+|---|---|---|
+| Plage | −2,8 → 12,5 °C | −0,8 → 3,7 °C |
+| Stations en gel (<0°C) | 9 / 37 | **12 / 37** |
+| — | biais T_skin−air = **−1,37 °C** · RMSE 2,49 °C · **r = 0,73** | T_skin min domaine −4,2 °C |
+
+Le T_skin descend plus bas que l'air — **le signal de gel radiatif**, exactement ce
+que Karpos vise (cf. `product.md` « CERRA-Land T_skin »). Résultat sur un **premier
+run non calibré**, rayonnement clear-sky (forecast CERRA `ssrd`/`strd` en secours,
+cf. ci-dessous).
+
+**Limites / suites** : `T2M` (diag 2 m air) sort en fill — comparaison faite sur
+`TSRAD` (T_skin, la variable opérante) ; rayonnement = clear-sky proxy (Brutsaert LW
++ solaire clair) en attendant le forecast CERRA ; un seul épisode (baseline saisons
+#5 + métriques POD/FAR #6 à dérouler) ; pas de calibration.
+
 ## Fichiers
 
-- `OPTIONS.nam` — PGD smoke. `OPTIONS_run.nam` — chaîne OFFLINE (AROME).
+- `OPTIONS.nam` — PGD smoke. `OPTIONS_run.nam` — OFFLINE (AROME). `OPTIONS_cerra.nam` — OFFLINE (CERRA).
 - `OPTIONS_soda.nam` — chaîne SODA (PGD+PREP+assimilation OI/EKF).
 - `arome_to_forcing.py`, `dem_to_surfex.py` — converters forcing/DEM.

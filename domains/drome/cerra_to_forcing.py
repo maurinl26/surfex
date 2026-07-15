@@ -72,7 +72,7 @@ def download(workdir, d0, d1):
             "data_type": "reanalysis", "product_type": "forecast",
             "year": years, "month": months, "day": daynums,
             "time": ["00:00", "06:00", "12:00", "18:00"],
-            "leadtime_hour": ["1", "2", "3"],
+            "leadtime_hour": ["1", "2", "3", "4", "5", "6"],
             "area": AREA, "grid": GRID, "data_format": "netcdf",
         }, str(ff))
     return fa, ff
@@ -90,22 +90,26 @@ def build_forcing(workdir, pgd_path, d0, d1):
     an = xr.open_dataset(fa)
     fc = xr.open_dataset(ff)
 
-    # temps analyse (instantané) = axe de référence
-    tname = "valid_time" if "valid_time" in an.coords else "time"
-    vt = np.asarray(an[tname].values).astype("datetime64[s]")
-    nt = vt.size
-    dt = float((vt[1] - vt[0]) / np.timedelta64(1, "s")) if nt > 1 else 10800.0
+    # AXE TEMPS = forecast horaire (leadtimes 1-6 → continu). L'analyse 3-horaire
+    # est interpolée temporellement dessus. La déaccumulation gère la remise à zéro
+    # à chaque init (00/06/12/18) via le leadtime déduit de l'heure.
+    from scipy.interpolate import interp1d
+
+    def _t(ds):
+        n = "valid_time" if "valid_time" in ds.coords else "time"
+        return np.asarray(ds[n].values).astype("datetime64[s]")
+
+    ft = _t(fc); order = np.argsort(ft); ft = ft[order]
+    nt = ft.size; dt = 3600.0
+    at = _t(an); aord = np.argsort(at); at = at[aord]
 
     def _latlon(ds):
         la = ds["latitude"].values; lo = ds["longitude"].values
-        if la.ndim == 1:
-            lo2, la2 = np.meshgrid(lo, la)
-        else:
-            la2, lo2 = la, lo
+        lo2, la2 = np.meshgrid(lo, la) if la.ndim == 1 else (lo, la)
         return la2.astype("f8"), lo2.astype("f8")
 
-    aLAT, aLON = _latlon(an)
-    src = np.column_stack([aLON.ravel(), aLAT.ravel()])
+    sLAT, sLON = _latlon(fc)                       # analyse et forecast : même grille CDS 0,05°
+    src = np.column_stack([sLON.ravel(), sLAT.ravel()])
     with Dataset(str(pgd_path)) as pgd:
         gLAT = np.asarray(pgd.variables["LAT"][:], "f8")
         gLON = np.asarray(pgd.variables["LON"][:], "f8")
@@ -113,34 +117,45 @@ def build_forcing(workdir, pgd_path, d0, d1):
     tgt = np.column_stack([gLON.ravel(), gLAT.ravel()])
     npF = tgt.shape[0]
 
-    def interp_t(field2d):   # (ny,nx) source → (npF,) sur PGD
+    def _sp(field2d):                              # (ny,nx) → (npF,) sur PGD
         g = griddata(src, np.asarray(field2d, "f8").ravel(), tgt, method="linear")
         h = ~np.isfinite(g)
         if h.any():
             g[h] = griddata(src, np.asarray(field2d, "f8").ravel(), tgt, method="nearest")[h]
         return g.astype("f4")
 
-    def series(ds, var):     # (time,ny,nx) → (nt,npF)
-        a = ds[var].values
-        return np.stack([interp_t(a[i]) for i in range(a.shape[0])]).astype("f4")
+    def analysis(var):                             # instant 3h → temps ft → PGD
+        a = np.asarray(an[var].values)[aord]       # (nt_a, ny, nx)
+        ta = (at - at[0]) / np.timedelta64(1, "s")
+        tf = (ft - at[0]) / np.timedelta64(1, "s")
+        ai = interp1d(ta, a, axis=0, bounds_error=False, fill_value=(a[0], a[-1]))(tf)
+        return np.stack([_sp(ai[i]) for i in range(nt)]).astype("f4")
 
-    Tair = series(an, _pick(an, "t2m", "2m_temperature"))
-    R2 = series(an, _pick(an, "r2", "2m_relative_humidity"))     # %
-    Wind = series(an, _pick(an, "si10", "10m_wind_speed"))
-    WDIR = series(an, _pick(an, "wdir10", "10m_wind_direction"))
-    PSurf = series(an, _pick(an, "sp", "surface_pressure"))
-    Qair = _rh_to_q(R2, Tair, PSurf)                              # kg/kg
+    def deaccum(var):                              # accumulé/init → flux horaire → PGD
+        a = np.asarray(fc[var].values)[order]      # (nt, ny, nx)
+        hod = ((ft - ft.astype("datetime64[D]")) / np.timedelta64(1, "h")).astype(int)
+        lt = ((hod - 1) % 6) + 1                    # leadtime 1..6 depuis l'heure
+        flux = np.empty_like(a, dtype="f8")
+        for i in range(nt):
+            flux[i] = a[i] / dt if (lt[i] == 1 or i == 0) else np.maximum(a[i] - a[i - 1], 0.0) / dt
+        return np.stack([_sp(flux[i]) for i in range(nt)]).astype("f4")
 
-    # forecast accumulés → flux, ré-échantillonnés sur l'axe analyse
-    SW = _accum_to_flux_on(fc, _pick(fc, "ssrd", "surface_solar_radiation_downwards"), vt, aLAT, aLON, tgt, src, dt)
-    LW = _accum_to_flux_on(fc, _pick(fc, "strd", "surface_thermal_radiation_downwards"), vt, aLAT, aLON, tgt, src, dt)
-    PR = _accum_to_flux_on(fc, _pick(fc, "tp", "total_precipitation"), vt, aLAT, aLON, tgt, src, dt)
+    Tair = analysis(_pick(an, "t2m", "2m_temperature"))
+    R2 = analysis(_pick(an, "r2", "2m_relative_humidity"))
+    Wind = analysis(_pick(an, "si10", "10m_wind_speed"))
+    WDIR = analysis(_pick(an, "wdir10", "10m_wind_direction"))
+    PSurf = analysis(_pick(an, "sp", "surface_pressure"))
+    Qair = _rh_to_q(R2, Tair, PSurf)
+
+    SW = deaccum(_pick(fc, "ssrd", "surface_solar_radiation_downwards"))
+    LW = deaccum(_pick(fc, "strd", "surface_thermal_radiation_downwards"))
+    PR = deaccum(_pick(fc, "tp", "total_precipitation"))
     DIR_SW, SCA_SW = 0.85 * SW, 0.15 * SW
     Rainf = np.where(Tair >= 273.15, PR, 0.0)
     Snowf = np.where(Tair < 273.15, PR, 0.0)
 
     fpath = wd / "FORCING.nc"
-    _write_forcing(fpath, vt, dt, gLON, gLAT, gZS, npF, nt,
+    _write_forcing(fpath, ft, dt, gLON, gLAT, gZS, npF, nt,
                    Tair, Qair, Wind, WDIR, PSurf, LW, DIR_SW, SCA_SW, Rainf, Snowf)
     return str(fpath), nt, npF
 
@@ -158,26 +173,6 @@ def _rh_to_q(rh_pct, t_k, p_pa):
     e = np.clip(rh_pct, 0, 100) / 100.0 * es
     return (0.622 * e / (p_pa - 0.378 * e)).astype("f4")
 
-
-def _accum_to_flux_on(fc, var, vt, aLAT, aLON, tgt, src, dt):
-    """Champs forecast accumulés → flux instantané interpolé sur les temps `vt` et la grille cible."""
-    import numpy as np
-    from scipy.interpolate import griddata
-    a = fc[var].values                        # (time_fc, ny, nx) accumulés
-    tname = "valid_time" if "valid_time" in fc.coords else "time"
-    ftime = np.asarray(fc[tname].values).astype("datetime64[s]")
-    # dérivée temporelle → flux (par point source), puis interp spatiale + temporelle simple
-    flux = np.maximum(np.gradient(a, axis=0), 0.0) / dt
-    npF = tgt.shape[0]
-    out = np.zeros((vt.size, npF), "f4")
-    for i, t in enumerate(vt):
-        j = int(np.argmin(np.abs(ftime - t)))
-        g = griddata(src, flux[j].ravel(), tgt, method="linear")
-        h = ~np.isfinite(g)
-        if h.any():
-            g[h] = griddata(src, flux[j].ravel(), tgt, method="nearest")[h]
-        out[i] = g
-    return out
 
 
 def _write_forcing(fpath, vt, dt, gLON, gLAT, gZS, npF, nt, Tair, Qair, Wind,

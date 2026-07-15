@@ -99,23 +99,26 @@ sur événements de gel réels attend le forcing archive.
 CERRA `reanalysis-cerra-single-levels` est **public** (Copernicus CDS, pas de MF) →
 débloque les saisons de gel historiques (`cerra_to_forcing.py`).
 
-**Run 2023-04-04→06 (épisode de gel Drôme), forcing CERRA → SURFEX 1 km :**
+**Run 2023-04-04→06 (épisode de gel Drôme), forcing CERRA (rayonnement réel) → SURFEX 1 km.**
+Comparaison @2023-04-05 04h vs 37 stations Sencrop :
 
-| @ 2023-04-05 04h | Sencrop (air 2 m) | T_skin SURFEX (CERRA) |
-|---|---|---|
-| Plage | −2,8 → 12,5 °C | −0,8 → 3,7 °C |
-| Stations en gel (<0°C) | 9 / 37 | **12 / 37** |
-| — | biais T_skin−air = **−1,37 °C** · RMSE 2,49 °C · **r = 0,73** | T_skin min domaine −4,2 °C |
+| Variable modèle | biais | RMSE | r | gel <0°C (modèle / obs) |
+|---|---|---|---|---|
+| **T2m air** (air-vs-air) | **−0,54 °C** | 2,14 °C | **0,72** | 12 / 9 |
+| **T_skin** (TSRAD) | −2,12 °C | 3,01 °C | 0,72 | **18** / 9 |
 
-Le T_skin descend plus bas que l'air — **le signal de gel radiatif**, exactement ce
-que Karpos vise (cf. `product.md` « CERRA-Land T_skin »). Résultat sur un **premier
-run non calibré**, rayonnement clear-sky (forecast CERRA `ssrd`/`strd` en secours,
-cf. ci-dessous).
+- **T2m quasi non biaisé** (−0,54°C) vs le vrai air Sencrop — sur un run **non calibré**.
+- **T_skin ~1,6°C plus froid que l'air** → détecte **18/37 stations en gel** (vs 9 en air) :
+  le signal de gel radiatif que le T2m rate, **exactement ce que Karpos vise**
+  (`product.md` « CERRA-Land T_skin »).
 
-**Limites / suites** : `T2M` (diag 2 m air) sort en fill — comparaison faite sur
-`TSRAD` (T_skin, la variable opérante) ; rayonnement = clear-sky proxy (Brutsaert LW
-+ solaire clair) en attendant le forecast CERRA ; un seul épisode (baseline saisons
-#5 + métriques POD/FAR #6 à dérouler) ; pas de calibration.
+Détails techniques :
+- Forcing = **CERRA réel** : analyse 3-horaire (t2m/r2/si10/wdir10/sp) + forecast leadtimes
+  **1-6** (ssrd/strd/tp), déaccumulés par init, interpolés sur la grille PGD 1 km.
+- `T2M` diag : fix **`N2M=2`** (méthode Paulson `CLS_TQ`) — sinon le 2 m sort en fill.
+
+**Suites** : dérouler la **saison Feb–Avr** (#5) ; **métriques POD/FAR/CSI** (#6) ; boucler
+**SODA** forcé CERRA (#7). Split direct/diffus SWdown encore simple (0,85/0,15).
 
 ## Fichiers
 
